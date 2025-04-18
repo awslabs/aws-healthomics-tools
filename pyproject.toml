@@ -14,11 +14,11 @@ packages = [{ include = "omics" }]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-s3transfer = "^0.10.2"
-boto3 = "^1.35.66"
-mypy-boto3-omics = "^1.35.66"
-boto3-stubs = "^1.35.66"
-botocore-stubs = "^1.35.66"
+s3transfer = "^0.11.0"
+boto3 = "^1.37.36"
+mypy-boto3-omics = "^1.37.36"
+boto3-stubs = "^1.37.36"
+botocore-stubs = "^1.37.36"
 docopt = "^0.6.2"
 python-dateutil = "^2.8.2"
 bokeh = "^3.5.1"
