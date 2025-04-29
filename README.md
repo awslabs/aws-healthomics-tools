@@ -368,7 +368,7 @@ this returns something like:
 ```text
 omics-run-analyzer: wrote run-1234567.csv
 ```
-
+##### Output Columns
 The CSV output by the command above includes the following columns:
 
 * __uuid__ : Globally unique identifier to identify runs across accounts and regions
