@@ -336,7 +336,7 @@ def add_metrics(res, resources, pricing, headroom=0.0):
     rtype = arn[-2]
     region = arn[3]
     res["type"] = rtype
-    headroom_multiplier = 1 + headroom
+    headroom_multiplier = 1 + int(headroom)
 
     metrics = res.get("metrics", {})
     # if a resource has no metrics body then we can skip the rest
