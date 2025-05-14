@@ -439,16 +439,14 @@ def get_timeline_event(res, resources):
         "running": (time3 - time2).total_seconds(),
     }
 
-
-if __name__ == "__main__":
+def main(argv=None):
     # Parse command-line options
-    opts = docopt.docopt(__doc__, version=f"v{importlib.metadata.version('aws-healthomics-tools')}")
+    opts = docopt.docopt(__doc__, version=f"v{importlib.metadata.version('aws-healthomics-tools')}", argv=argv)
     if opts["--verbose"]:
         # print(opts, file=sys.stderr)
         logger.setLevel(logging.DEBUG)
 
     logger.debug("command line options: %s", opts)
-
     try:
         session = boto3.Session(profile_name=opts["--profile"], region_name=opts["--region"])
         pricing = session.client("pricing", region_name=PRICING_AWS_REGION)
@@ -639,3 +637,6 @@ if __name__ == "__main__":
         title = f"arn: {run['arn']}, name: {run.get('name')}"
 
         timeline.plot_timeline(resources, title=title, max_duration_hrs=run_duration_hrs)
+
+if __name__ == "__main__":
+    main()

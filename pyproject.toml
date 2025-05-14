@@ -2,6 +2,10 @@
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
+[tool.poetry.scripts]
+aws-healthomics-tools = "omics.cli.aho:main"
+
+
 [tool.poetry]
 name = "aws-healthomics-tools"
 version = "0.12.0"

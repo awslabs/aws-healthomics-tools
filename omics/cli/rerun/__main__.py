@@ -298,9 +298,8 @@ def start_run_request(run, opts={}):
             rqst["workflowVersionName"] = workflow_version_name
     return rqst
 
-
-if __name__ == "__main__":
-    opts = docopt.docopt(__doc__)
+def main(argv=None):
+    opts = docopt.docopt(__doc__, argv=argv)
 
     try:
         logs = boto3.client("logs")
@@ -345,3 +344,6 @@ if __name__ == "__main__":
     if opts["--out"]:
         out.close()
         sys.stderr.write(f"{exename}: wrote {opts['--out']}\n")
+
+if __name__ == "__main__":
+    main()
