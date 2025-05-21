@@ -12,8 +12,9 @@ from docopt import DocoptExit, docopt
 
 
 def main():
+    """Parse command line arguments and route to appropriate subcommand."""
     try:
-        args = docopt(__doc__, argv=sys.argv[1:2])
+        _ = docopt(__doc__, argv=sys.argv[1:2])
         command = sys.argv[1] if len(sys.argv) > 1 else None
         sub_args = sys.argv[2:]
         if command == "run_analyzer":

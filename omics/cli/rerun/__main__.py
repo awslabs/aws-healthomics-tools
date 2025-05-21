@@ -10,7 +10,7 @@ Usage: omics-rerun [<runIdOrArn>...]
                    [--workflow-type=<type>]
                    [--run-id=<id>]
                    [--role-arn=<arn>]
-                   [--name=<name>]
+                   [--name=<n>]
                    [--cache-id=<id>]
                    [--cache-behavior=<value>]
                    [--run-group-id=<id>]
@@ -37,7 +37,7 @@ Options:
  --workflow-type=<type>                 Override original run parameter
  --run-id=<id>                          Override original run parameter
  --role-arn=<arn>                       Override original run parameter
- --name=<name>                          Override original run parameter
+ --name=<n>                          Override original run parameter
  --cache-id <value>                     Override original run parameter, use NONE to clear an old cache id
  --cache-behavior <value>               Override original run parameter, CACHE_ON_FAILURE or CACHE_ALWAYS
  --run-group-id=<id>                    Override original run parameter
@@ -300,6 +300,7 @@ def start_run_request(run, opts={}):
 
 
 def main(argv=None):
+    """Parse command line arguments and execute rerun command."""
     opts = docopt.docopt(__doc__, argv=argv)
 
     try:
