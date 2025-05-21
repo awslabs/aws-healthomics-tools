@@ -4,7 +4,7 @@ import sys
 import unittest
 from unittest import mock
 
-from omics.cli.aho import main
+from omics.cli.command_router import main
 
 
 class TestAho(unittest.TestCase):

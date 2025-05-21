@@ -3,7 +3,7 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-aws-healthomics-tools = "omics.cli.aho:main"
+aws-healthomics-tools = "omics.cli.command_router:main"
 
 
 [tool.poetry]
