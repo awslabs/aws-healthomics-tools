@@ -7,7 +7,8 @@ Usage:
 """
 
 import sys
-from docopt import docopt, DocoptExit
+
+from docopt import DocoptExit, docopt
 
 
 def main():
