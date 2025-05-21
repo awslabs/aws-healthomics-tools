@@ -37,7 +37,7 @@ Options:
  --workflow-type=<type>                 Override original run parameter
  --run-id=<id>                          Override original run parameter
  --role-arn=<arn>                       Override original run parameter
- --name=<n>                          Override original run parameter
+ --name=<name>                          Override original run parameter
  --cache-id <value>                     Override original run parameter, use NONE to clear an old cache id
  --cache-behavior <value>               Override original run parameter, CACHE_ON_FAILURE or CACHE_ALWAYS
  --run-group-id=<id>                    Override original run parameter
