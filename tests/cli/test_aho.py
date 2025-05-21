@@ -20,24 +20,24 @@ class TestAho(unittest.TestCase):
     @mock.patch("omics.cli.run_analyzer.__main__.main")
     def test_main_run_analyzer(self, mock_run_analyzer_main, mock_docopt):
         """Test that the run_analyzer command is correctly routed."""
-        
+
         mock_docopt.return_value = {"run_analyzer": True}
         sys.argv = ["aho", "run_analyzer", "123456"]
-        
+
         main()
-        
+
         mock_run_analyzer_main.assert_called_once_with(["123456"])
 
     @mock.patch("docopt.docopt")
     @mock.patch("omics.cli.rerun.__main__.main")
     def test_main_rerun(self, mock_rerun_main, mock_docopt):
         """Test that the rerun command is correctly routed."""
-        
+
         mock_docopt.return_value = {"rerun": True}
         sys.argv = ["aho", "rerun", "123456"]
-        
+
         main()
-        
+
         mock_rerun_main.assert_called_once_with(["123456"])
 
 

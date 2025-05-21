@@ -9,6 +9,7 @@ Usage:
 import sys
 from docopt import docopt, DocoptExit
 
+
 def main():
     try:
         args = docopt(__doc__, argv=sys.argv[1:2])
@@ -16,9 +17,11 @@ def main():
         sub_args = sys.argv[2:]
         if command == "run_analyzer":
             from omics.cli.run_analyzer.__main__ import main as run_analyzer_main
+
             run_analyzer_main(sub_args)
         elif command == "rerun":
             from omics.cli.rerun.__main__ import main as rerun_main
+
             rerun_main(sub_args)
         else:
             print("Unknown or missing command.")
