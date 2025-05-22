@@ -229,13 +229,13 @@ The `rerun` tool makes it easy to start a new run execution from a CloudWatch Lo
 For an overview of what it does and available options run:
 
 ```bash
-python -m omics.cli.rerun -h
+aws-healthomics-tools rerun -h
 ```
 
 #### List runs from manifest
 The following example lists all workflow run ids which were completed on July 1st (UTC time):
 ```bash
-python -m omics.cli.rerun -s 2023-07-01T00:00:00 -e 2023-07-02T00:00:00
+aws-healthomics-tools rerun -s 2023-07-01T00:00:00 -e 2023-07-02T00:00:00
 ```
 
 this returns something like:
@@ -249,7 +249,7 @@ this returns something like:
 To rerun a previously-executed run, specify the run id you would like to rerun:
 
 ```bash
-python -m omics.cli.rerun 1234567
+aws-healthomics-tools rerun 1234567
 ```
 
 this returns something like:
@@ -278,7 +278,7 @@ StartRun response:
 It is possible to override a request parameter from the original run. The following example tags the new run, which is particularly useful as tags are not propagated from the original run.
 
 ```bash
-python -m omics.cli.rerun 1234567 --tag=myKey=myValue
+aws-healthomics-tools rerun 1234567 --tag=myKey=myValue
 
 ```
 
@@ -311,7 +311,7 @@ StartRun response:
 
 Before submitting a rerun request, it is possible to dry-run to view the new StartRun request:
 ```bash
-python -m omics.cli.rerun -d 1234567
+aws-healthomics-tools rerun -d 1234567
 ```
 
 this returns something like:
@@ -335,13 +335,13 @@ The `run_analyzer` tool retrieves a workflow run manifest from CloudWatchLogs an
 For an overview of what it does and available options run:
 
 ```bash
-python -m omics.cli.run_analyzer -h
+aws-healthomics-tools run_analyzer -h
 ```
 
 #### List completed runs
 The following example lists all workflow runs completed in the past 5 days:
 ```bash
-python -m omics.cli.run_analyzer -t5d
+aws-healthomics-tools run_analyzer -t5d
 ```
 
 this returns something like:
@@ -354,13 +354,13 @@ Workflow run IDs (<completionTime> <UUID>):
 
 #### Analyze a specific workflow run
 ```bash
-python -m omics.cli.run_analyzer 1234567 -o run-1234567.csv
+aws-healthomics-tools run_analyzer 1234567 -o run-1234567.csv
 ```
 
 ##### Providing a UUID
 If a run ID is ambiguous, you can provide a UUID along with the run ID in the following way:
 ```bash
-python -m omics.cli.run_analyzer 1234567:2eca9876-ac33-98cd-0298-11cc59c05273 -o run-1234567.csv
+aws-healthomics-tools run_analyzer 1234567:2eca9876-ac33-98cd-0298-11cc59c05273 -o run-1234567.csv
 ```
 
 this returns something like:
@@ -428,7 +428,7 @@ If your analyzed run is already close to optimal then adding headroom might resu
 The RunAnalyzer tool can produce an interative timeline plot of a workflow. The plots allow you to visualize how individual tasks ran over the course of the run.
 
 ```bash
-python -m omics.cli.run_analyzer -P plots/ 7113639
+aws-healthomics-tools run_analyzer -P plots/ 7113639
 ```
 
 ![Example time line image showing stacked horizontal bars indicating the time taken by each task](./assets/timeline.png)
@@ -436,7 +436,7 @@ python -m omics.cli.run_analyzer -P plots/ 7113639
 #### Output workflow run manifest in JSON format
 
 ```bash
-python -m omics.cli.run_analyzer 1234567 -s -o run-1234567.json
+aws-healthomics-tools run_analyzer 1234567 -s -o run-1234567.json
 ```
 
 this returns something like:
@@ -451,7 +451,7 @@ omics-run-analyzer: wrote run-1234567.json
 The `--write-config` option will write a new configuration file with the `recommendedCpus` and `recommendedMemoryGiB` as the resource requirements. This will take the maximum values if the task is run multiple times with different inputs. 
 
 ```bash
-python -m omics.cli.run_analyzer 123456 --write-config=optimized.config
+aws-healthomics-tools run_analyzer 123456 --write-config=optimized.config
 ```
 
 #### Aggregate scattered tasks and multiple runs (batch mode)
@@ -462,13 +462,13 @@ python -m omics.cli.run_analyzer 123456 --write-config=optimized.config
 The `--batch` option can be used with a single run to aggregate all scattered tasks into one summarized task report. Non scattered tasks are also aggregated but will have a count of 1.
 
 ```bash
-python -m omics.cli.run_analyzer 1234567 --batch
+aws-healthomics-tools run_analyzer 1234567 --batch
 ```
 
 The option may also be used with multiple runs to aggregate all tasks including scattered tasks.
 
 ```bash
-python -m omics.cli.run_analyzer 1234567 2345678 3456789 --batch
+aws-healthomics-tools run_analyzer 1234567 2345678 3456789 --batch
 ```
 
 These statics are reported in CSV format:
