@@ -96,7 +96,6 @@ STORAGE_TYPE_STATIC_RUN_STORAGE = "STATIC"
 PRICE_RESOURCE_TYPE_DYNAMIC_RUN_STORAGE = "Dynamic Run Storage"
 PRICE_RESOURCE_TYPE_STATIC_RUN_STORAGE = "Run Storage"
 
-
 def die(msg):
     """Show error message and terminate"""
     exit(f"{exename}: {msg}")
