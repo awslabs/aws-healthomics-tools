@@ -28,6 +28,7 @@ python-dateutil = "^2.8.2"
 bokeh = "^3.5.1"
 pandas = "^2.2.2"
 tornado = ">=6.5.0"  # Added to fix security vulnerability
+pillow = ">=11.3.0"
 
 [tool.poetry.group.dev.dependencies]
 black = ">=22.8,<25.0"
