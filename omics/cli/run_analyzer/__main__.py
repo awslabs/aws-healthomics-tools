@@ -335,7 +335,7 @@ def add_metrics(res, resources, pricing, headroom=0.0):
     rtype = arn[-2]
     region = arn[3]
     res["type"] = rtype
-    headroom_multiplier = 1 + headroom
+    headroom_multiplier = 1.0 + float(headroom)
 
     metrics = res.get("metrics", {})
     # if a resource has no metrics body then we can skip the rest
@@ -439,15 +439,16 @@ def get_timeline_event(res, resources):
     }
 
 
-if __name__ == "__main__":
+def main(argv=None):
     # Parse command-line options
-    opts = docopt.docopt(__doc__, version=f"v{importlib.metadata.version('aws-healthomics-tools')}")
+    opts = docopt.docopt(
+        __doc__, version=f"v{importlib.metadata.version('aws-healthomics-tools')}", argv=argv
+    )
     if opts["--verbose"]:
         # print(opts, file=sys.stderr)
         logger.setLevel(logging.DEBUG)
 
     logger.debug("command line options: %s", opts)
-
     try:
         session = boto3.Session(profile_name=opts["--profile"], region_name=opts["--region"])
         pricing = session.client("pricing", region_name=PRICING_AWS_REGION)
@@ -638,3 +639,7 @@ if __name__ == "__main__":
         title = f"arn: {run['arn']}, name: {run.get('name')}"
 
         timeline.plot_timeline(resources, title=title, max_duration_hrs=run_duration_hrs)
+
+
+if __name__ == "__main__":
+    main()

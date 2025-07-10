@@ -49,8 +49,10 @@ _sizes = {
     "12xlarge": 48,
     "16xlarge": 64,
     "24xlarge": 96,
+    "32xlarge": 128,
+    "48xlarge": 192,
 }
-_families = {"c": 2, "m": 4, "r": 8, "g4dn": 16, "g5": 16}
+_families = {"c": 2, "m": 4, "r": 8, "g4dn": 16, "g5": 16, "g6": 16, "g6e": 32}
 
 
 def omics_instance_weight(instance: str) -> int:
