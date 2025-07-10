@@ -24,3 +24,7 @@ jobs:
       - name: Run lint & tests
         run: | 
          make ci
+      - name: Run security scan
+        run: |
+         poetry run pip-audit
+        continue-on-error: false
