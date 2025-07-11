@@ -9,3 +9,11 @@ scripts/
 .idea
 .vscode
 PUBLISHING.md
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+tests/*/venv/
+tests/*/unit/venv/
