@@ -218,7 +218,7 @@ class OmicsIORenameFileTask(Task):
 
     def _main(self, fileobj, final_filename, osutil):
         fileobj.close()
-        if _file_is_gzipped(fileobj.name):
+        if _file_is_gzipped(fileobj.name) and not final_filename.lower().endswith(".gz"):
             final_filename = final_filename + ".gz"
         osutil.rename_file(fileobj.name, final_filename)
 
