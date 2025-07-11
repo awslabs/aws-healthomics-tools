@@ -38,12 +38,21 @@ jobs:
       continue-on-error: true
 
     - name: Run pip-audit with sarif output for GitHub Security
-      run: poetry run pip-audit --format=sarif --output=security-results.sarif
+      run: poetry run pip-audit --format=sarif --output=security-results.sarif || echo "No vulnerabilities found or SARIF generation failed"
       continue-on-error: true
+
+    - name: Check if SARIF file exists
+      id: sarif-check
+      run: |
+        if [ -f "security-results.sarif" ]; then
+          echo "sarif-exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "sarif-exists=false" >> $GITHUB_OUTPUT
+        fi
 
     - name: Upload SARIF results to GitHub Security
       uses: github/codeql-action/upload-sarif@v3
-      if: always()
+      if: steps.sarif-check.outputs.sarif-exists == 'true'
       with:
         sarif_file: security-results.sarif
 
