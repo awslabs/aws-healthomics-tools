@@ -2298,14 +2298,14 @@ urllib3 = ">=2"
 
 [[package]]
 name = "types-s3transfer"
-version = "0.6.2"
+version = "0.13.0"
 description = "Type annotations and code completion for s3transfer"
 optional = false
-python-versions = ">=3.7,<4.0"
+python-versions = ">=3.8"
 groups = ["main", "dev"]
 files = [
-    {file = "types_s3transfer-0.6.2-py3-none-any.whl", hash = "sha256:1068877b6e59be5226fa3006ae64371ac9d5bc590dfdbd9c66fd0a075d3254ac"},
-    {file = "types_s3transfer-0.6.2.tar.gz", hash = "sha256:4ba9b483796fdcd026aa162ee03bdcedd2bf7d08e9387c820dcdd158b0102057"},
+    {file = "types_s3transfer-0.13.0-py3-none-any.whl", hash = "sha256:79c8375cbf48a64bff7654c02df1ec4b20d74f8c5672fc13e382f593ca5565b3"},
+    {file = "types_s3transfer-0.13.0.tar.gz", hash = "sha256:203dadcb9865c2f68fb44bc0440e1dc05b79197ba4a641c0976c26c9af75ef52"},
 ]
 
 [[package]]
@@ -2381,4 +2381,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "fe511dbce6fb7bd19661c04b494c6a4ca80d137733ee980b574eeb08dfc5d5c2"
+content-hash = "ff8acda56628c84bf4c14f7232365439a2fe88159f9f8ac621613ea466924cac"
