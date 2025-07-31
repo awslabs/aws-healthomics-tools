@@ -70,7 +70,7 @@ class TransferManager:
     def __init__(
         self,
         client: OmicsClient,
-        config: TransferConfig = None,
+        config: Optional[TransferConfig] = None,
     ):
         """Initialize a Transfer Manager.
 
@@ -126,7 +126,7 @@ class TransferManager:
         self,
         reference_store_id: str,
         reference_id: str,
-        directory: str = None,
+        directory: Optional[str] = None,
         subscribers: List[OmicsTransferSubscriber] = [],
         wait: bool = True,
     ) -> List[OmicsTransferFuture]:
@@ -185,7 +185,7 @@ class TransferManager:
         reference_store_id: str,
         reference_id: str,
         server_filename: ReferenceFileName,
-        client_fileobj: Union[IO[Any], str] = None,
+        client_fileobj: Optional[Union[IO[Any], str]] = None,
         subscribers: List[OmicsTransferSubscriber] = [],
         wait: bool = True,
     ) -> OmicsTransferFuture:
@@ -237,7 +237,7 @@ class TransferManager:
         self,
         sequence_store_id: str,
         read_set_id: str,
-        directory: str = None,
+        directory: Optional[str] = None,
         subscribers: List[OmicsTransferSubscriber] = [],
         wait: bool = True,
     ) -> List[OmicsTransferFuture]:
@@ -299,7 +299,7 @@ class TransferManager:
         sequence_store_id: str,
         read_set_id: str,
         server_filename: ReadSetFileName,
-        client_fileobj: Union[IO[Any], str] = None,
+        client_fileobj: Optional[Union[IO[Any], str]] = None,
         subscribers: List[OmicsTransferSubscriber] = [],
         wait: bool = True,
     ) -> OmicsTransferFuture:

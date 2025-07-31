@@ -228,7 +228,7 @@ class ReadSetUploadSubmissionTask(SubmissionTask):
         transfer_future: TransferFuture,
         create_multipart_future: Awaitable[str],
         part_source: ReadSetFileName,
-        bandwidth_limiter: BandwidthLimiter = None,
+        bandwidth_limiter: Optional[BandwidthLimiter] = None,
     ):
         """Submit the upload futures for each task.
 

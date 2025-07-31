@@ -21,9 +21,9 @@ class ExtendedEnum(Enum):
         Args:
             object: the object to convert to an Enum.
         """
-        if type(object) == cls:
+        if isinstance(object, cls):
             return object
-        if type(object) == str:
+        if isinstance(object, str):
             for enum in cls:
                 if object.upper() == enum.value:
                     return enum
