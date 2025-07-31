@@ -1,3 +1,5 @@
+from typing import Optional
+
 from s3transfer.constants import KB
 
 
@@ -15,7 +17,7 @@ class TransferConfig:
         max_io_queue_size: int = 1000,
         io_chunksize: int = 256 * KB,
         num_download_attempts: int = 5,
-        max_bandwidth: int = None,
+        max_bandwidth: Optional[int] = None,
     ):
         """Create a Transfer Manager configuration.
 
@@ -77,7 +79,12 @@ class TransferConfig:
 
     def _validate_attrs_are_nonzero(self) -> None:
         for attr, attr_val in self.__dict__.items():
-            if attr_val is not None and (type(attr_val) == int) and attr_val <= 0:
+            if (
+                attr_val is not None
+                and isinstance(attr_val, int)
+                and not isinstance(attr_val, bool)
+                and attr_val <= 0
+            ):
                 raise ValueError(
                     "Provided parameter %s of value %s must be greater than "
                     "0." % (attr, attr_val)

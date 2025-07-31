@@ -24,7 +24,7 @@ class FileDownload:
         filename: str,
         fileobj: Union[IO[Any], str],
         omics_file_type: OmicsFileType,
-        subscribers: List[BaseSubscriber] = None,
+        subscribers: Optional[List[BaseSubscriber]] = None,
     ):
         """Details of a file download.
 
