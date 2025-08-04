@@ -1367,14 +1367,14 @@ reports = ["lxml"]
 
 [[package]]
 name = "mypy-boto3-omics"
-version = "1.39.0"
-description = "Type annotations for boto3 Omics 1.39.0 service generated with mypy-boto3-builder 8.11.0"
+version = "1.40.0"
+description = "Type annotations for boto3 Omics 1.40.0 service generated with mypy-boto3-builder 8.11.0"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "mypy_boto3_omics-1.39.0-py3-none-any.whl", hash = "sha256:db330cdc7c542ffc32527f4a7696738510845f464457398c63c1ec489a680ffe"},
-    {file = "mypy_boto3_omics-1.39.0.tar.gz", hash = "sha256:177372a05ebea7e89c0c8d7821e6f52afe25bcbd10972c6ee2cbc4c5f71a4525"},
+    {file = "mypy_boto3_omics-1.40.0-py3-none-any.whl", hash = "sha256:a8ac3a4fc7ec61137374fae5ff6d6fe13dc136665f1aec36972218b17b53e6d3"},
+    {file = "mypy_boto3_omics-1.40.0.tar.gz", hash = "sha256:ad00d1f5cceca71791b3ce24a520beb5455e5ed0178ace9908ddaabbd2113668"},
 ]
 
 [package.dependencies]
