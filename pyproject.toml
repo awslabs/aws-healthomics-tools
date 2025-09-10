@@ -8,7 +8,7 @@ aws-healthomics-tools = "omics.cli.command_router:main"
 
 [tool.poetry]
 name = "aws-healthomics-tools"
-version = "0.13.1a0"
+version = "0.13.1"
 license = "Apache-2.0"
 description = "Tools for working with the AWS HealthOmics Service"
 repository = "https://github.com/awslabs/amazon-omics-tools"
@@ -18,7 +18,7 @@ packages = [{ include = "omics" }]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-s3transfer = ">=0.11.0,<0.13.0"
+s3transfer = ">=0.14.0"
 boto3 = "^1.37.36"
 mypy-boto3-omics = "^1.37.36"
 boto3-stubs = "^1.37.36"
