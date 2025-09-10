@@ -128,31 +128,6 @@ def get_static_storage_gib(capacity=None):
     return int(capacity) * omics_storage_inc
 
 
-def get_instance(cpus, mem):
-    """Return a tuple of smallest matching instance type (str), cpus in that type (int), GiB memory of that type (int)"""
-    sizes = {
-        "": 2,
-        "x": 4,
-        "2x": 8,
-        "4x": 16,
-        "8x": 32,
-        "12x": 48,
-        "16x": 64,
-        "24x": 96,
-    }
-    families = {"c": 2, "m": 4, "r": 8}
-    for size in sorted(sizes, key=lambda x: sizes[x]):
-        ccount = sizes[size]
-        if ccount < cpus:
-            continue
-        for fam in sorted(families, key=lambda x: families[x]):
-            mcount = ccount * families[fam]
-            if mcount < mem:
-                continue
-            return (f"omics.{fam}.{size}large", ccount, mcount)
-    return ""
-
-
 def get_pricing(pricing, resource, region, hours):
     key = f"{resource}:{region}"  # noqa E231
     price = get_pricing.pricing.get(key)
@@ -407,10 +382,24 @@ def add_metrics(res, resources, pricing, headroom=0.0):
             # Get smallest instance type that meets the requirements
             cpus_max = math.ceil(cpus_max * headroom_multiplier)
             mem_max = math.ceil(mem_max * headroom_multiplier)
-            (itype, cpus, mem) = get_instance(cpus_max, mem_max)
-            metrics["omicsInstanceTypeMinimum"] = itype
-            metrics["recommendedCpus"] = cpus
-            metrics["recommendedMemoryGiB"] = mem
+            instance_result = utils.get_instance_for_requirements(cpus_max, mem_max)
+            if instance_result:
+                (itype, cpus, mem) = instance_result
+                metrics["omicsInstanceTypeMinimum"] = itype
+                metrics["recommendedCpus"] = cpus
+                metrics["recommendedMemoryGiB"] = mem
+            else:
+                # No suitable instance found - requirements exceed largest available instance
+                task_name = res.get("name", "unknown")
+                task_arn = res.get("arn", "unknown")
+                sys.stderr.write(
+                    f"{exename}: WARNING - No suitable instance found for task '{task_name}' "
+                    f"(ARN: {task_arn}) with requirements: {cpus_max} CPUs, {mem_max} GiB memory. "
+                    f"Requirements exceed largest available instance (omics.r.48xlarge: 192 CPUs, 1536 GiB).\n"
+                )
+                metrics["omicsInstanceTypeMinimum"] = "REQUIREMENTS_EXCEED_LARGEST_INSTANCE"
+                metrics["recommendedCpus"] = cpus_res
+                metrics["recommendedMemoryGiB"] = mem_res
         else:
             metrics["omicsInstanceTypeMinimum"] = itype
             metrics["recommendedCpus"] = cpus_res
