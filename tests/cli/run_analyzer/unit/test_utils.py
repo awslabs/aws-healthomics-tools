@@ -73,3 +73,44 @@ class TestRunAnalyzerUtils(unittest.TestCase):
         stubber.activate()
         self.assertEqual(utils.get_engine(workflow_arn, client=omics), "WDL")
         stubber.deactivate()
+
+    def test_get_instance_for_requirements(self):
+        # Test basic functionality
+        instance, cpus, mem = utils.get_instance_for_requirements(1, 1)
+        self.assertEqual(instance, "omics.c.large")
+        self.assertEqual(cpus, 2)
+        self.assertEqual(mem, 4)
+
+        # Test memory-optimized selection
+        instance, cpus, mem = utils.get_instance_for_requirements(2, 8)
+        self.assertEqual(instance, "omics.m.large")
+        self.assertEqual(cpus, 2)
+        self.assertEqual(mem, 8)
+
+        # Test r-family selection (high memory requirement)
+        instance, cpus, mem = utils.get_instance_for_requirements(2, 12)
+        self.assertEqual(instance, "omics.r.large")
+        self.assertEqual(cpus, 2)
+        self.assertEqual(mem, 16)
+
+        # Test larger instance selection
+        instance, cpus, mem = utils.get_instance_for_requirements(8, 16)
+        self.assertEqual(instance, "omics.c.2xlarge")
+        self.assertEqual(cpus, 8)
+        self.assertEqual(mem, 16)
+
+        # Test 48xlarge support
+        instance, cpus, mem = utils.get_instance_for_requirements(100, 400)
+        self.assertEqual(instance, "omics.m.32xlarge")
+        self.assertEqual(cpus, 128)
+        self.assertEqual(mem, 512)
+
+        # Test actual 48xlarge requirement
+        instance, cpus, mem = utils.get_instance_for_requirements(192, 1536)
+        self.assertEqual(instance, "omics.r.48xlarge")
+        self.assertEqual(cpus, 192)
+        self.assertEqual(mem, 1536)
+
+        # Test requirements that exceed largest instance
+        result = utils.get_instance_for_requirements(1000, 5000)
+        self.assertEqual(result, ())
