@@ -54,6 +54,30 @@ _sizes = {
 }
 _families = {"c": 2, "m": 4, "r": 8, "g4dn": 16, "g5": 16, "g6": 16, "g6e": 32}
 
+# Non-GPU families for instance selection (used by run analyzer)
+_compute_families = {"c": 2, "m": 4, "r": 8}
+
+
+def get_instance_for_requirements(cpus, mem):
+    """Return a tuple of smallest matching instance type (str), cpus in that type (int), GiB memory of that type (int)
+
+    Returns empty tuple if no suitable instance is found (requirements exceed largest available instance).
+    """
+    supported_sizes = list(_sizes.keys())
+
+    for size in supported_sizes:
+        ccount = _sizes[size]
+        if ccount < cpus:
+            continue
+        for fam in sorted(_compute_families, key=lambda x: _compute_families[x]):
+            mcount = ccount * _compute_families[fam]
+            if mcount < mem:
+                continue
+            return (f"omics.{fam}.{size}", ccount, mcount)
+
+    # Return empty tuple instead of empty string to avoid unpacking errors
+    return ()
+
 
 def omics_instance_weight(instance: str) -> int:
     """Compute a numeric weight for an instance to be used in sorting or finding a max or min"""
