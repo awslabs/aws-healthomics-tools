@@ -16,6 +16,25 @@ updates:
     commit-message:
       prefix: "deps"
       include: "scope"
+    groups:
+      aws-sdk:
+        patterns:
+          - "boto*"
+          - "mypy-boto3-*"
+      dev-dependencies:
+        patterns:
+          - "pytest*"
+          - "mypy"
+          - "black"
+          - "flake8"
+          - "coverage"
+          - "tox"
+      data-processing:
+        patterns:
+          - "pandas"
+          - "numpy"
+          - "bokeh"
+          - "jinja2"
 
   # Enable security updates for GitHub Actions
   - package-ecosystem: "github-actions"
@@ -26,3 +45,7 @@ updates:
     labels:
       - "github-actions"
       - "security"
+    groups:
+      actions:
+        patterns:
+          - "*"
