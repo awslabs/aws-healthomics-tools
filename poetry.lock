@@ -116,14 +116,14 @@ crt = ["botocore[crt] (>=1.21.0,<2.0a0)"]
 
 [[package]]
 name = "boto3-stubs"
-version = "1.41.2"
-description = "Type annotations for boto3 1.41.2 generated with mypy-boto3-builder 8.12.0"
+version = "1.41.5"
+description = "Type annotations for boto3 1.41.5 generated with mypy-boto3-builder 8.12.0"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "boto3_stubs-1.41.2-py3-none-any.whl", hash = "sha256:5aac2ee5c1bed1a322016d37077e42c68c3ff83a42f989549be3ed21f0a7e0a0"},
-    {file = "boto3_stubs-1.41.2.tar.gz", hash = "sha256:9bdac65413825b1202654bd5633316a561271164c6123211ac805e61cb59f120"},
+    {file = "boto3_stubs-1.41.5-py3-none-any.whl", hash = "sha256:016f45999d6685f8d80f07f24d3a16eab4e50ba153e6cd3398dc290bf968cbca"},
+    {file = "boto3_stubs-1.41.5.tar.gz", hash = "sha256:514a24282147760af1ec6f9035c2c451c91c78817d18457c50d841ee52daa088"},
 ]
 
 [package.dependencies]
@@ -184,7 +184,7 @@ bedrock-data-automation-runtime = ["mypy-boto3-bedrock-data-automation-runtime (
 bedrock-runtime = ["mypy-boto3-bedrock-runtime (>=1.41.0,<1.42.0)"]
 billing = ["mypy-boto3-billing (>=1.41.0,<1.42.0)"]
 billingconductor = ["mypy-boto3-billingconductor (>=1.41.0,<1.42.0)"]
-boto3 = ["boto3 (==1.41.2)"]
+boto3 = ["boto3 (==1.41.5)"]
 braket = ["mypy-boto3-braket (>=1.41.0,<1.42.0)"]
 budgets = ["mypy-boto3-budgets (>=1.41.0,<1.42.0)"]
 ce = ["mypy-boto3-ce (>=1.41.0,<1.42.0)"]
@@ -569,14 +569,14 @@ crt = ["awscrt (==0.28.4)"]
 
 [[package]]
 name = "botocore-stubs"
-version = "1.41.2.post1"
+version = "1.41.6"
 description = "Type annotations and code completion for botocore"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "botocore_stubs-1.41.2.post1-py3-none-any.whl", hash = "sha256:4b6230cc65466ceb811df8442fe4cd025a955aad8328646791a0f1ed46bccd15"},
-    {file = "botocore_stubs-1.41.2.post1.tar.gz", hash = "sha256:acf2145b85c5165378b298cb90bbc3a0da59e79204e4af3499d95d0d6d11987c"},
+    {file = "botocore_stubs-1.41.6-py3-none-any.whl", hash = "sha256:859e4147b5b14dc5eb64fc84fa02424839354368a0fea41da52c7a1d06427e37"},
+    {file = "botocore_stubs-1.41.6.tar.gz", hash = "sha256:2b53574c4ea4f8d5887e516ef2208b996fd988fc2a613f676ea9144597f20cd2"},
 ]
 
 [package.dependencies]
@@ -1532,14 +1532,14 @@ reports = ["lxml"]
 
 [[package]]
 name = "mypy-boto3-omics"
-version = "1.40.64"
-description = "Type annotations for boto3 Omics 1.40.64 service generated with mypy-boto3-builder 8.11.0"
+version = "1.41.0"
+description = "Type annotations for boto3 Omics 1.41.0 service generated with mypy-boto3-builder 8.12.0"
 optional = false
-python-versions = ">=3.8"
+python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "mypy_boto3_omics-1.40.64-py3-none-any.whl", hash = "sha256:d9fe18714333c604c39ad0ebf91a39b21037910d60c3b40230ee2cca49893def"},
-    {file = "mypy_boto3_omics-1.40.64.tar.gz", hash = "sha256:86382f953700d7c39e32924882997e9a5e3349cef71d7ad4accd1a74ecd2725e"},
+    {file = "mypy_boto3_omics-1.41.0-py3-none-any.whl", hash = "sha256:a3d91df85c92b508974ae1dd083e3539cc15dc631f3061f18f860c5779579754"},
+    {file = "mypy_boto3_omics-1.41.0.tar.gz", hash = "sha256:6c75fd0ea4a32c234b661533af7becd93b1aae434fcfd07086696d53e31b449f"},
 ]
 
 [package.dependencies]
