@@ -12,6 +12,8 @@ on:
 jobs:
   security-scan:
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write
     name: Security Vulnerability Scan
     
     steps:
