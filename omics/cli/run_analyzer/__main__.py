@@ -384,7 +384,7 @@ def add_metrics(res, resources, pricing, headroom=0.0):
             mem_max = math.ceil(mem_max * headroom_multiplier)
             instance_result = utils.get_instance_for_requirements(cpus_max, mem_max)
             if instance_result:
-                (itype, cpus, mem) = instance_result
+                itype, cpus, mem = instance_result
                 metrics["omicsInstanceTypeMinimum"] = itype
                 metrics["recommendedCpus"] = cpus
                 metrics["recommendedMemoryGiB"] = mem

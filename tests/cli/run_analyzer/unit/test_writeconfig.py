@@ -21,8 +21,7 @@ def test_create_config():
         os.unlink(tmp.name)
 
         # Verify content
-        expected = textwrap.dedent(
-            """process {
+        expected = textwrap.dedent("""process {
 withName: task1 {
     cpus = 2
     memory = 4.GB
@@ -32,8 +31,7 @@ withName: task2 {
     cpus = 4
     memory = 8.GB
 }
-}"""
-        )
+}""")
     assert content.strip() == expected.strip()
 
     # Test invalid engine
