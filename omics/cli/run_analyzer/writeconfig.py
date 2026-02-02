@@ -6,14 +6,12 @@ def create_config(engine, task_resources, filename):
     if engine == "NEXTFLOW":
         task_strings = []
         for task in task_resources:
-            task_string = textwrap.dedent(
-                f"""
+            task_string = textwrap.dedent(f"""
             withName: {task} {{
                 cpus = {task_resources[task]['cpus']}
                 memory = {task_resources[task]['mem']}.GB
             }}
-            """  # noqa E202
-            )
+            """)  # noqa E202
             task_strings.append(task_string)
 
         tasks_joined = "".join(task_strings)

@@ -62,6 +62,7 @@ Examples:
  # Dry run specified workflow run
  omics-rerun -d 1234567
 """
+
 import datetime
 import json
 import os
