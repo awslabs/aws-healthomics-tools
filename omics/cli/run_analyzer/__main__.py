@@ -581,10 +581,9 @@ def main(argv=None):
                 if opts["--write-config"]:
                     if res["type"] == "run":
                         wfid = res["workflow"].split("/")[-1]
-                        get_wf_kwargs = {"id": wfid}
-                        if opts["--workflow-owner-id"]:
-                            get_wf_kwargs["workflowOwnerId"] = opts["--workflow-owner-id"]
-                        engine = omics.get_workflow(**get_wf_kwargs)["engine"]
+                        engine = utils.get_engine_from_id(
+                            wfid, omics, opts["--workflow-owner-id"]
+                        )
                     if res["type"] == "task":
                         task_name = utils.task_base_name(res["name"], engine)
                         if task_name not in config.keys():
