@@ -10,11 +10,12 @@ Usage: omics-run-analyzer [<runId>...]
                           [--plot=<directory>]
                           [--headroom=<float>]
                           [--write-config=<path>]
+                          [--workflow-owner-id=<value>]
                           [--verbose]
        omics-run-analyzer --timeline <runId> [--profile=<profile>] [--region=<region>] [--vebose]
        omics-run-analyzer --time <interval>  [--profile=<profile>] [--region=<region>] [--vebose]
        omics-run-analyzer --batch <runId>... [--profile=<profile>] [--region=<region>] [--headroom=<float>]
-                                             [--out=<path>] [--verbose]
+                                             [--out=<path>] [--workflow-owner-id=<value>] [--verbose]
        omics-run-analyzer (-h --help)
        omics-run-analyzer --version
 
@@ -37,6 +38,7 @@ Options:
  -s, --show                     Show run resources with no post-processing (JSON)
  -T, --timeline                 Show workflow run timeline
  -V, --verbose                  Verbose output
+ -w, --workflow-owner-id=<value> Workflow owner account ID, required for shared workflows
 
  -h, --help                     Show help text
  --version                      Show the version of this application
@@ -471,7 +473,9 @@ def main(argv=None):
             for run in runs:
                 resources = get_run_resources(logs, run)
                 run_engine = utils.get_engine(
-                    workflow_arn=resources[0]["workflow"], client=session.client("omics")
+                    workflow_arn=resources[0]["workflow"],
+                    client=session.client("omics"),
+                    workflow_owner_id=opts["--workflow-owner-id"],
                 )
                 if not engine:
                     engine = run_engine
@@ -577,7 +581,9 @@ def main(argv=None):
                 if opts["--write-config"]:
                     if res["type"] == "run":
                         wfid = res["workflow"].split("/")[-1]
-                        engine = omics.get_workflow(id=wfid)["engine"]
+                        engine = utils.get_engine_from_id(
+                            wfid, omics, opts["--workflow-owner-id"]
+                        )
                     if res["type"] == "task":
                         task_name = utils.task_base_name(res["name"], engine)
                         if task_name not in config.keys():

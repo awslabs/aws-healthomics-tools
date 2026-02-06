@@ -7,15 +7,18 @@ _nextflow_task_regex = r"^(.+)(\s\(.+\))$"
 _cwl_task_regex = r"^(^\D+)(_\d+)?$"
 
 
-def get_engine(workflow_arn: str, client) -> str:
+def get_engine(workflow_arn: str, client, workflow_owner_id: str = None) -> str:
     """Get the engine name for the workflow_arn using the omics client"""
     id = workflow_arn.split("/")[-1]
-    return get_engine_from_id(id, client)
+    return get_engine_from_id(id, client, workflow_owner_id)
 
 
-def get_engine_from_id(workflow_id: str, client) -> str:
+def get_engine_from_id(workflow_id: str, client, workflow_owner_id: str = None) -> str:
     """Get the engine name for the workflow_id using the omics client"""
-    return client.get_workflow(id=workflow_id)["engine"]
+    kwargs = {"id": workflow_id}
+    if workflow_owner_id:
+        kwargs["workflowOwnerId"] = workflow_owner_id
+    return client.get_workflow(**kwargs)["engine"]
 
 
 def task_base_name(name: str, engine: str) -> str:
