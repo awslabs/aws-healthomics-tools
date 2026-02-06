@@ -1,4 +1,5 @@
 import re
+from typing import Optional
 
 ENGINES = {"WDL", "CWL", "NEXTFLOW"}
 
@@ -7,13 +8,13 @@ _nextflow_task_regex = r"^(.+)(\s\(.+\))$"
 _cwl_task_regex = r"^(^\D+)(_\d+)?$"
 
 
-def get_engine(workflow_arn: str, client, workflow_owner_id: str = None) -> str:
+def get_engine(workflow_arn: str, client, workflow_owner_id: Optional[str] = None) -> str:
     """Get the engine name for the workflow_arn using the omics client"""
     id = workflow_arn.split("/")[-1]
     return get_engine_from_id(id, client, workflow_owner_id)
 
 
-def get_engine_from_id(workflow_id: str, client, workflow_owner_id: str = None) -> str:
+def get_engine_from_id(workflow_id: str, client, workflow_owner_id: Optional[str] = None) -> str:
     """Get the engine name for the workflow_id using the omics client"""
     kwargs = {"id": workflow_id}
     if workflow_owner_id:
