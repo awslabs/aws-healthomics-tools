@@ -42,7 +42,7 @@ Options:
  --cache-behavior <value>               Override original run parameter, CACHE_ON_FAILURE or CACHE_ALWAYS
  --run-group-id=<id>                    Override original run parameter
  --priority=<priority>                  Override original run parameter
- --parameter=<key=value>...             Override original run parameter
+ --parameter=<key=value>...             Override original run parameter (dot-path keys set nested values)
  --storage-capacity=<value>             Override original run parameter
  --storage-type=<value>                 Override original run parameter, DYNAMIC or STATIC
  --workflow-owner-id=<value>            Override original run parameter, required for shared workflows
@@ -63,6 +63,7 @@ Examples:
  omics-rerun -d 1234567
 """
 
+import copy
 import datetime
 import json
 import os
@@ -81,6 +82,21 @@ exename = os.path.basename(sys.argv[0])
 def die(msg):
     """Show error message and terminate"""
     exit(f"{exename}: {msg}")
+
+
+def _set_nested(params, path, value):
+    """Set params[a][b][c] = value, walking/creating dicts along the dot-path."""
+    segments = path.split(".")
+    cursor = params
+    for seg in segments[:-1]:
+        nxt = cursor.get(seg)
+        if not isinstance(nxt, dict):
+            if seg in cursor:
+                die(f"--parameter path {path!r}: {seg!r} is not an object")
+            nxt = {}
+            cursor[seg] = nxt
+        cursor = nxt
+    cursor[segments[-1]] = value
 
 
 def stream_to_run(strm):
@@ -231,14 +247,14 @@ def start_run_request(run, opts={}):
     if "priority" in rqst:
         rqst["priority"] = int(rqst["priority"])
     if run.get("parameters"):
-        rqst["parameters"] = run["parameters"]
+        rqst["parameters"] = copy.deepcopy(run["parameters"])
     for p in (opts or {}).get("--parameter", []):
-        m = re.match(r"^(\w+)=(\w+)", p)
-        if not m:
+        if "=" not in p:
             die(f"invalid --parameter: {p} (expecting <key>=<value>)")
+        key, _, value = p.partition("=")
         if "parameters" not in rqst:
             rqst["parameters"] = {}
-        rqst["parameters"][m.group(1)] = m.group(2)
+        _set_nested(rqst["parameters"], key, value)
     if rqst["workflowType"] != "READY2RUN":
         if opts.get("--storage-capacity") or run.get("storageCapacity"):
             set_param(rqst, "storageCapacity", "--storage-capacity")
