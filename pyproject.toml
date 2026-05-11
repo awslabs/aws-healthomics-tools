@@ -37,7 +37,7 @@ requests = ">=2.33.0"
 [tool.poetry.group.dev.dependencies]
 black = "^26.0"
 pytest = ">=9.0.3,<10.0.0"
-mypy = "^1.18.2"
+mypy = ">=1.18.2,<3.0.0"
 flake8 = "^7.3.0"
 flake8-docstrings = "^1.6.0"
 isort = ">=5.10.1,<9.0.0"
