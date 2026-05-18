@@ -1,0 +1,48 @@
+name: Release to PyPI
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip poetry
+          make install
+      - name: Run lint & tests
+        run: make ci
+
+  publish:
+    needs: ci
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+      - name: Install poetry
+        run: pip install --upgrade pip poetry
+      - name: Verify version matches tag
+        run: |
+          PKG_VERSION=$(poetry version -s)
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "ERROR: pyproject.toml version ($PKG_VERSION) != tag ($TAG_VERSION)"
+            exit 1
+          fi
+      - name: Build package
+        run: poetry build
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
