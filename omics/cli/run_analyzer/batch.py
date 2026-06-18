@@ -1,8 +1,14 @@
+"""Batch aggregation of multiple workflow runs."""
+
+from __future__ import annotations
+
 import statistics
 import sys
+from typing import IO, Optional, Union
 
-from . import __main__ as main
 from . import utils
+from .metrics import add_metrics
+from .pricing import PricingCache
 
 hdrs = [
     "type",
@@ -26,47 +32,61 @@ hdrs = [
 
 
 def aggregate_and_print(
-    run_resources_list: list[list[dict]], pricing: dict, engine: str, headroom=0.0, out=sys.stdout
-):
-    """Aggregate resources and print to output"""
+    run_resources_list: list[list[dict]],
+    pricing_cache: PricingCache,
+    engine: str,
+    headroom: float = 0.0,
+    out: Optional[Union[str, IO[str]]] = None,
+) -> None:
+    """Aggregate resources and print to output."""
     if engine not in utils.ENGINES:
         raise ValueError(
             f"Invalid engine for use in batch aggregation: {engine}. Must be one of {utils.ENGINES}"
         )
 
-    task_names = set()
+    # Resolve output target
+    if out is None:
+        output = sys.stdout
+    elif isinstance(out, str):
+        output = open(out, "w")
+    else:
+        output = out
+
+    task_names: set[str] = set()
     for run_resources in run_resources_list:
-        for res in run_resources:
+        for res in list(run_resources):
             # skip resources that are not tasks
             if "task" not in res["arn"]:
                 run_resources.remove(res)
                 continue
-            main.add_metrics(res, run_resources, pricing, headroom)
+            add_metrics(res, run_resources, pricing_cache, headroom)
             task_names.add(utils.task_base_name(res["name"], engine))
 
     # print headers
-    print(",".join(hdrs), file=out)
+    print(",".join(hdrs), file=output)
 
-    task_names = set(sorted(task_names))
-    for task_name in task_names:
-        _aggregate_resources(run_resources_list, task_name, engine, out)
+    task_names_sorted = sorted(task_names)
+    for task_name in task_names_sorted:
+        _aggregate_resources(run_resources_list, task_name, engine, output)
+
+    if isinstance(out, str):
+        output.close()
 
 
 def _aggregate_resources(
-    run_resources_list: list[list[dict]], task_base_name: str, engine: str, out
-):
-    """Aggregate resources with the same base name"""
+    run_resources_list: list[list[dict]], task_base_name: str, engine: str, out: IO[str]
+) -> None:
+    """Aggregate resources with the same base name."""
     run_tasks_with_name: list[dict] = []
 
     for run_resources in run_resources_list:
         for run_task in run_resources:
-            # find resources in run_resources that have a name matching the task_name
             run_task_base_name = utils.task_base_name(run_task["name"], engine)
             if run_task_base_name == task_base_name:
                 run_tasks_with_name.append(run_task)
 
     # for each header key, perform the aggregation
-    aggregate = {}
+    aggregate: dict = {}
     for k in hdrs:
         if k == "type":
             aggregate[k] = "task"
@@ -97,13 +117,13 @@ def _aggregate_resources(
 
 
 def _do_aggregation(resources_list: list[dict], resource_key: str, operation: str):
+    """Perform a single aggregation operation across resources."""
     if operation == "count":
         return len(resources_list)
     elif operation == "sum":
         return sum([r[resource_key] for r in resources_list])
     elif operation == "maximum":
         if resource_key == "omicsInstanceTypeMinimum":
-            # special case for instance types
             instances = []
             for r in resources_list:
                 if resource_key in r["metrics"]:

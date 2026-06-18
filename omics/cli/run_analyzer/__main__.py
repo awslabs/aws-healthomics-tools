@@ -63,55 +63,46 @@ Examples:
  omics-run-analyzer -b 1234567 2345678 3456789 -o out.csv
 """
 
+from __future__ import annotations
+
 import csv
 import datetime
 import importlib.metadata
 import json
 import logging
-import math
 import os
 import re
 import sys
+from typing import IO, NoReturn, Optional
 
 import boto3
-import dateutil
-import dateutil.utils
 import docopt
 from bokeh.plotting import output_file
 
 from . import batch  # type: ignore
 from . import timeline  # type: ignore
 from . import utils, writeconfig
+from .exceptions import RunAnalyzerError
+from .metrics import add_metrics, parse_time_str
+from .pricing import PRICING_AWS_REGION, PricingCache
 
-exename = os.path.basename(sys.argv[0])
+EXENAME = os.path.basename(sys.argv[0])
 logging.basicConfig(
     format="%(asctime)s run_analyzer:%(levelname)s - %(message)s", level=logging.WARNING
 )
-logger = logging.getLogger(exename)
+logger = logging.getLogger(EXENAME)
 
 OMICS_LOG_GROUP = "/aws/omics/WorkflowLog"
 OMICS_SERVICE_CODE = "AmazonOmics"
-PRICING_AWS_REGION = "us-east-1"  # Pricing service endpoint
-SECS_PER_HOUR = 3600.0
-STORAGE_TYPE_DYNAMIC_RUN_STORAGE = "DYNAMIC"
-STORAGE_TYPE_STATIC_RUN_STORAGE = "STATIC"
-PRICE_RESOURCE_TYPE_DYNAMIC_RUN_STORAGE = "Dynamic Run Storage"
-PRICE_RESOURCE_TYPE_STATIC_RUN_STORAGE = "Run Storage"
 
 
-def die(msg):
-    """Show error message and terminate"""
-    exit(f"{exename}: {msg}")
+def die(msg: object) -> NoReturn:
+    """Show error message and terminate."""
+    raise RunAnalyzerError(str(msg))
 
 
-def parse_time_str(s, utc=True):
-    """Parse time string"""
-    tz = datetime.timezone.utc
-    return dateutil.parser.parse(s).replace(tzinfo=tz) if s else None
-
-
-def parse_time_delta(s):
-    """Parse time delta string"""
+def parse_time_delta(s: str) -> datetime.timedelta:
+    """Parse time delta string."""
     m = re.match(r"(\d+)\s*(m|min|minutes?|h|hours?|d|days?|w|weeks?|y|years?)$", s)
     if not m:
         die("unrecognized time interval format '{}'".format(s))
@@ -120,48 +111,13 @@ def parse_time_delta(s):
     return datetime.timedelta(seconds=delta)
 
 
-def get_static_storage_gib(capacity=None):
-    """Return filesystem size in GiB"""
-    omics_storage_min = 1200  # Minimum size
-    omics_storage_inc = 2400  # Size increment (2400, 4800, 7200, ...)
-    if not capacity or capacity <= omics_storage_min:
-        return omics_storage_min
-    capacity = (capacity + omics_storage_inc - 1) / omics_storage_inc
-    return int(capacity) * omics_storage_inc
+# ---------------------------------------------------------------------------
+# AWS data retrieval helpers
+# ---------------------------------------------------------------------------
 
 
-def get_pricing(pricing, resource, region, hours):
-    key = f"{resource}:{region}"  # noqa E231
-    price = get_pricing.pricing.get(key)
-    if price:
-        return price * hours
-    elif not pricing:
-        return None
-    filters = [
-        {"Type": "TERM_MATCH", "Field": "resourceType", "Value": resource},
-        {"Type": "TERM_MATCH", "Field": "regionCode", "Value": region},
-    ]
-    rqst = {"ServiceCode": OMICS_SERVICE_CODE, "Filters": filters}
-    for page in pricing.get_paginator("get_products").paginate(**rqst):
-        for item in page["PriceList"]:
-            entry = json.loads(item)
-            price = entry.get("terms", {}).get("OnDemand", {})
-            price = next(iter(price.values()), {}).get("priceDimensions", {})
-            price = next(iter(price.values()), {}).get("pricePerUnit", {})
-            price = price.get("USD")
-            if price is None:
-                continue
-            price = float(price)
-            get_pricing.pricing[key] = price
-            return price * hours
-    return None
-
-
-get_pricing.pricing = {}
-
-
-def stream_to_run(strm):
-    """Convert CloudWatch Log stream to workflow run details"""
+def stream_to_run(strm: dict) -> Optional[dict]:
+    """Convert CloudWatch Log stream to workflow run details."""
     m = re.match(r"^manifest/run/(\d+)/([a-f0-9-]+)$", strm["logStreamName"])
     if not m:
         return None
@@ -170,10 +126,9 @@ def stream_to_run(strm):
     return strm
 
 
-def get_streams(logs, rqst, start_time=None):
-    """Get matching CloudWatch Log streams"""
-    streams = []
-    # using boto3 get the log stream descriptions for the request, paginating the responses
+def get_streams(logs, rqst: dict, start_time: Optional[float] = None) -> list[dict]:
+    """Get matching CloudWatch Log streams."""
+    streams: list[dict] = []
     for page in logs.get_paginator("describe_log_streams").paginate(**rqst):
         done = False
         for strm in page["logStreams"]:
@@ -182,7 +137,7 @@ def get_streams(logs, rqst, start_time=None):
             elif stream_to_run(strm):
                 streams.append(strm)
                 if (len(streams) % 100) == 0:
-                    sys.stderr.write(f"{exename}: found {len(streams)} workflow runs\n")
+                    sys.stderr.write(f"{EXENAME}: found {len(streams)} workflow runs\n")
                 if not start_time:
                     done = True
         if done:
@@ -190,49 +145,47 @@ def get_streams(logs, rqst, start_time=None):
     return streams
 
 
-def get_runs(logs, runs, opts):
-    """Get matching workflow runs"""
-    streams = []
+def get_runs(logs, runs: list[str], opts: dict) -> list[dict]:
+    """Get matching workflow runs."""
+    streams: list[dict] = []
     if runs:
-        # Get specified runs
         for run in runs:
-            run = re.split(r"[:/]", run)
-            if re.match(r"[a-f\d]{8}(-[a-f\d]{4}){3}-[a-f\d]{12}$", run[-1]):
-                prefix = f"manifest/run/{run[-2]}/{run[-1]}"
+            run_parts = re.split(r"[:/]", run)
+            if re.match(r"[a-f\d]{8}(-[a-f\d]{4}){3}-[a-f\d]{12}$", run_parts[-1]):
+                prefix = f"manifest/run/{run_parts[-2]}/{run_parts[-1]}"
             else:
-                prefix = f"manifest/run/{run[-1]}/"
+                prefix = f"manifest/run/{run_parts[-1]}/"
             rqst = {
                 "logGroupName": OMICS_LOG_GROUP,
                 "logStreamNamePrefix": prefix,
             }
             returned_streams = get_streams(logs, rqst)
-            if returned_streams and len(returned_streams) > 0:
-                streams.extend(get_streams(logs, rqst))
+            if returned_streams:
+                streams.extend(returned_streams)
             else:
-                die(f"run {run[-1]} not found")
+                die(f"run {run_parts[-1]} not found")
     else:
-        # Get runs in time range
         start_time = datetime.datetime.now() - parse_time_delta(opts["--time"])
-        start_time = start_time.timestamp() * 1000.0
-        rqst = {
+        start_time_ms = start_time.timestamp() * 1000.0
+        rqst_desc: dict[str, object] = {
             "logGroupName": OMICS_LOG_GROUP,
             "orderBy": "LastEventTime",
             "descending": True,
         }
-        streams.extend(get_streams(logs, rqst, start_time))
-    runs = [stream_to_run(s) for s in streams]
-    return sorted(runs, key=lambda x: x["creationTime"])
+        streams.extend(get_streams(logs, rqst_desc, start_time_ms))
+    result = [stream_to_run(s) for s in streams]
+    return sorted(result, key=lambda x: x["creationTime"])
 
 
-def get_run_resources(logs, run):
-    """Get workflow run/task details"""
+def get_run_resources(logs, run: dict) -> list[dict]:
+    """Get workflow run/task details."""
     rqst = {
         "logGroupName": OMICS_LOG_GROUP,
         "logStreamName": run["logStreamName"],
         "startFromHead": True,
         "endTime": run["lastEventTimestamp"] + 1,
     }
-    resources = []
+    resources: list[dict] = []
     done = False
     while not done:
         resp = logs.get_log_events(**rqst)
@@ -245,27 +198,97 @@ def get_run_resources(logs, run):
     return sorted(resources, key=lambda x: x.get("creationTime", "1970-01-01"))
 
 
-def add_run_util(run, tasks):
-    """Add run metrics computed from task metrics"""
-    events = []
-    stop1 = None
-    stops = []
-    for idx, task in enumerate(tasks):
-        start = parse_time_str(task.get("startTime"))
-        if start:
-            events.append({"time": start, "event": "start", "index": idx})
-        stop = parse_time_str(task.get("stopTime"))
-        if stop:
-            events.append({"time": stop, "event": "stop", "index": idx})
-            if not stop1 or stop > stop1:
-                stop1 = stop
-        else:
-            stops.append(idx)
-    for idx in stops:
-        events.append({"time": stop1, "event": "stop", "index": idx})
-    events.sort(key=lambda x: x["time"])
+# ---------------------------------------------------------------------------
+# Call-cache detection
+# ---------------------------------------------------------------------------
 
-    metric_names = [
+
+def is_task_cached(res: dict) -> bool:
+    """Check if a task resource was served from call cache (missing timing data)."""
+    return not (res.get("creationTime") and res.get("startTime") and res.get("stopTime"))
+
+
+# ---------------------------------------------------------------------------
+# Output handlers
+# ---------------------------------------------------------------------------
+
+
+def _handle_show(resources: list[dict], out: IO[str]) -> None:
+    """Write resources as JSON."""
+    out.write(json.dumps(resources, indent=2) + "\n")
+
+
+def _handle_timeline(resources: list[dict], out: IO[str]) -> None:
+    """Write a CSV timeline, skipping cached tasks gracefully."""
+    hdrs = ["resource", "pending", "starting", "running"]
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow(hdrs)
+    cached_tasks: list[str] = []
+    executed_tasks = 0
+    for res in resources:
+        event = _get_timeline_event(res, resources)
+        if event is None:
+            cached_tasks.append(res.get("name", res.get("arn", "unknown")))
+            continue
+        row = [event.get(h, "") for h in hdrs]
+        writer.writerow(row)
+        executed_tasks += 1
+    if cached_tasks:
+        total = executed_tasks + len(cached_tasks)
+        sys.stderr.write(
+            f"{EXENAME}: {len(cached_tasks)}/{total} tasks were served from "
+            f"call cache and are not shown in the timeline: "
+            f"{', '.join(cached_tasks)}\n"
+        )
+    if executed_tasks == 0:
+        die(
+            "all tasks in this run were served from call cache. "
+            "No timing data is available to build a timeline."
+        )
+
+
+def _handle_stats(
+    resources: list[dict],
+    session,
+    pricing_cache: PricingCache,
+    opts: dict,
+    out: IO[str],
+) -> None:
+    """Write CSV run statistics and optionally write a recommended config."""
+    headroom = 0.0
+    if opts["--headroom"]:
+        try:
+            headroom = float(opts["--headroom"])
+        except Exception:
+            die(f'the --headroom argument {opts["--headroom"]} is not a valid float value')
+        if headroom > 1.0 or headroom < 0.0:
+            die(f"the --headroom argument {headroom} must be between 0.0 and 1.0")
+
+    def tocsv(val):
+        if val is None:
+            return ""
+        return f"{val:f}" if type(val) is float else str(val)
+
+    hdrs = [
+        "uuid",
+        "arn",
+        "type",
+        "name",
+        "startTime",
+        "stopTime",
+        "runningSeconds",
+        "cpus",
+        "gpus",
+        "memory",
+        "omicsInstanceTypeReserved",
+        "omicsInstanceTypeMinimum",
+        "recommendedCpus",
+        "recommendedMemoryGiB",
+        "estimatedUSD",
+        "minimumUSD",
+        "cpuUtilizationRatio",
+        "memoryUtilizationRatio",
+        "storageUtilizationRatio",
         "cpusReserved",
         "cpusMaximum",
         "cpusAverage",
@@ -273,146 +296,124 @@ def add_run_util(run, tasks):
         "memoryReservedGiB",
         "memoryMaximumGiB",
         "memoryAverageGiB",
+        "storageReservedGiB",
+        "storageMaximumGiB",
+        "storageAverageGiB",
     ]
-    metrics = run.get("metrics", {})
-    run["metrics"] = metrics
 
-    active = []
-    t0 = None
-    time = 0
-    for evt in events:
-        t1 = evt["time"]
-        if t0:
-            secs = (t1 - t0).total_seconds()
-            time += secs
-            for name in metric_names:
-                task_metrics = tasks[idx].get("metrics", {})
-                mvalues = [task_metrics.get(name) for idx in active]
-                mvalues = [v for v in mvalues if v is not None]
-                if not mvalues:
-                    continue
-                total = sum(mvalues)
-                if "Average" in name:
-                    metrics[name] = metrics.get(name, 0) + total * secs
+    hrdrs_map = {
+        "cpus": "cpusRequested",
+        "gpus": "gpusRequested",
+        "memory": "memoryRequestedGiB",
+    }
+    formatted_headers = [hrdrs_map.get(h, h) for h in hdrs]
+
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow(formatted_headers)
+    config: dict = {}
+    omics = session.client("omics")
+    engine = ""
+    for res in resources:
+        add_metrics(res, resources, pricing_cache, headroom, exename=EXENAME)
+        metrics = res.get("metrics", {})
+        if opts["--write-config"]:
+            if res["type"] == "run":
+                wfid = res["workflow"].split("/")[-1]
+                engine = utils.get_engine_from_id(wfid, omics, opts["--workflow-owner-id"])
+            if res["type"] == "task":
+                task_name = utils.task_base_name(res["name"], engine)
+                if task_name not in config:
+                    config[task_name] = {
+                        "cpus": metrics["recommendedCpus"],
+                        "mem": metrics["recommendedMemoryGiB"],
+                    }
                 else:
-                    metrics[name] = max(metrics.get(name, total), total)
-        t0 = t1
-        if evt["event"] == "start":
-            active.append(evt["index"])
-        elif evt["index"] in active:
-            active.remove(evt["index"])
+                    config[task_name] = {
+                        "cpus": max(metrics["recommendedCpus"], config[task_name]["cpus"]),
+                        "mem": max(metrics["recommendedMemoryGiB"], config[task_name]["mem"]),
+                    }
+        row = [tocsv(metrics.get(h, res.get(h))) for h in hdrs]
+        writer.writerow(row)
 
-    for name in metric_names:
-        if name in metrics and "Average" in name:
-            metrics[name] /= time
-
-
-def add_metrics(res, resources, pricing, headroom=0.0):
-    """Add run/task metrics"""
-    arn = re.split(r"[:/]", res["arn"])
-    rtype = arn[-2]
-    region = arn[3]
-    res["type"] = rtype
-    headroom_multiplier = 1.0 + float(headroom)
-
-    metrics = res.get("metrics", {})
-    # if a resource has no metrics body then we can skip the rest
-    if res.get("metrics") is None:
-        return
-
-    if rtype == "run":
-        add_run_util(res, resources[1:])
-
-    time1 = parse_time_str(res.get("startTime"))
-    time2 = parse_time_str(res.get("stopTime"))
-    running = 0
-    if time1 and time2:
-        running = (time2 - time1).total_seconds()
-        metrics["runningSeconds"] = running
-
-    cpus_res = metrics.get("cpusReserved")
-    cpus_max = metrics.get("cpusMaximum")
-    if cpus_res and cpus_max:
-        metrics["cpuUtilizationRatio"] = float(cpus_max) / float(cpus_res)
-    gpus_res = metrics.get("gpusReserved")
-    mem_res = metrics.get("memoryReservedGiB")
-    mem_max = metrics.get("memoryMaximumGiB")
-    if mem_res and mem_max:
-        metrics["memoryUtilizationRatio"] = float(mem_max) / float(mem_res)
-    store_res = metrics.get("storageReservedGiB", 0.0)
-    store_max = metrics.get("storageMaximumGiB", 0.0)
-    store_avg = metrics.get("storageAverageGiB", 0.0)
-    if store_res and store_max:
-        metrics["storageUtilizationRatio"] = float(store_max) / float(store_res)
-
-    storage_type = res.get("storageType", STORAGE_TYPE_STATIC_RUN_STORAGE)
-
-    if rtype == "run":
-        # Get capacity requested (static), capacity max. used (dynamic) and
-        # charged storage (the requested capacity for static or average used for dynamic)
-        if storage_type == STORAGE_TYPE_STATIC_RUN_STORAGE:
-            price_resource_type = PRICE_RESOURCE_TYPE_STATIC_RUN_STORAGE
-            capacity = get_static_storage_gib(res.get("storageCapacity"))
-            charged = capacity
-        elif storage_type == STORAGE_TYPE_DYNAMIC_RUN_STORAGE:
-            price_resource_type = PRICE_RESOURCE_TYPE_DYNAMIC_RUN_STORAGE
-            capacity = store_max
-            charged = store_avg
-
-        # Get price for actually used storage (approx. for dynamic storage)
-        gib_hrs = charged * running / SECS_PER_HOUR
-        price = get_pricing(pricing, price_resource_type, region, gib_hrs)
-        if price:
-            metrics["estimatedUSD"] = price
-
-        # Get price for optimal static storage
-        if store_max:
-            capacity = get_static_storage_gib(store_max * headroom_multiplier)
-        gib_hrs = capacity * running / SECS_PER_HOUR
-        price = get_pricing(pricing, PRICE_RESOURCE_TYPE_STATIC_RUN_STORAGE, region, gib_hrs)
-        if price:
-            metrics["minimumUSD"] = price
-
-    elif "instanceType" in res:
-        runningForInstanceCost = max(60, running)
-        itype = res["instanceType"]
-        metrics["omicsInstanceTypeReserved"] = itype
-        price = get_pricing(pricing, itype, region, runningForInstanceCost / SECS_PER_HOUR)
-        if price:
-            metrics["estimatedUSD"] = price
-        if cpus_max and mem_max and not gpus_res:
-            # Get smallest instance type that meets the requirements
-            cpus_max = math.ceil(cpus_max * headroom_multiplier)
-            mem_max = math.ceil(mem_max * headroom_multiplier)
-            instance_result = utils.get_instance_for_requirements(cpus_max, mem_max)
-            if instance_result:
-                itype, cpus, mem = instance_result
-                metrics["omicsInstanceTypeMinimum"] = itype
-                metrics["recommendedCpus"] = cpus
-                metrics["recommendedMemoryGiB"] = mem
-            else:
-                # No suitable instance found - requirements exceed largest available instance
-                task_name = res.get("name", "unknown")
-                task_arn = res.get("arn", "unknown")
-                sys.stderr.write(
-                    f"{exename}: WARNING - No suitable instance found for task '{task_name}' "
-                    f"(ARN: {task_arn}) with requirements: {cpus_max} CPUs, {mem_max} GiB memory. "
-                    f"Requirements exceed largest available instance (omics.r.48xlarge: 192 CPUs, 1536 GiB).\n"
-                )
-                metrics["omicsInstanceTypeMinimum"] = "REQUIREMENTS_EXCEED_LARGEST_INSTANCE"
-                metrics["recommendedCpus"] = cpus_res
-                metrics["recommendedMemoryGiB"] = mem_res
-        else:
-            metrics["omicsInstanceTypeMinimum"] = itype
-            metrics["recommendedCpus"] = cpus_res
-            metrics["recommendedMemoryGiB"] = mem_res
-        price = get_pricing(pricing, itype, region, runningForInstanceCost / SECS_PER_HOUR)
-        if price:
-            metrics["minimumUSD"] = price
+    if opts["--write-config"]:
+        filename = opts["--write-config"]
+        writeconfig.create_config(engine, config, filename)
 
 
-def get_timeline_event(res, resources):
-    """Convert resource to timeline event"""
+def _handle_plot(resources: list[dict], opts: dict) -> None:
+    """Generate a Bokeh HTML timeline plot."""
+    if len(resources) < 1:
+        die("no resources to plot")
+
+    run: dict = {}
+    plot_resources = list(resources)
+    for res in plot_resources:
+        rtype = re.split(r"[:/]", res["arn"])[-2]
+        if rtype == "run":
+            run = res
+            plot_resources.remove(res)
+            break
+
+    # Identify cached tasks before plotting
+    cached_tasks = [res for res in plot_resources if is_task_cached(res)]
+    executed_tasks = [res for res in plot_resources if not is_task_cached(res)]
+
+    if cached_tasks:
+        total = len(cached_tasks) + len(executed_tasks)
+        cached_names = [t.get("name", t.get("arn", "unknown")) for t in cached_tasks]
+        sys.stderr.write(
+            f"{EXENAME}: {len(cached_tasks)}/{total} tasks were served from "
+            f"call cache and are not shown in the plot: "
+            f"{', '.join(cached_names)}\n"
+        )
+
+    if not executed_tasks:
+        die(
+            "all tasks in this run were served from call cache. "
+            "No timing data is available to build a timeline plot."
+        )
+
+    start = datetime.datetime.strptime(run["startTime"], "%Y-%m-%dT%H:%M:%S.%fZ")
+    stop = datetime.datetime.strptime(run["stopTime"], "%Y-%m-%dT%H:%M:%S.%fZ")
+    run_duration_hrs = (stop - start).total_seconds() / 3600
+
+    runid = run["arn"].split("/")[-1]
+    output_file_basename = f"{runid}_timeline"
+
+    plot_dir = opts["--plot"]
+    if not os.path.isdir(plot_dir):
+        os.makedirs(plot_dir)
+    output_file(
+        filename=os.path.join(plot_dir, f"{output_file_basename}.html"),
+        title=runid,
+        mode="cdn",
+    )
+    title = f"arn: {run['arn']}, name: {run.get('name')}"
+    if cached_tasks:
+        title += f" ({len(cached_tasks)} cached tasks not shown)"
+
+    timeline.plot_timeline(executed_tasks, title=title, max_duration_hrs=run_duration_hrs)
+
+
+def _handle_list_runs(runs: list[dict], out: IO[str]) -> None:
+    """Show available runs when no specific resources loaded."""
+    out.write("Workflow run IDs (<completionTime> <UUID>):\n")
+    for r in runs:
+        time0 = r["creationTime"] / 1000.0
+        time0 = datetime.datetime.fromtimestamp(time0)
+        time0 = time0.isoformat(timespec="seconds")
+        out.write(f"{r['id']} ({time0} {r['uuid']})\n")
+
+
+# ---------------------------------------------------------------------------
+# Timeline event helper
+# ---------------------------------------------------------------------------
+
+
+def _get_timeline_event(res: dict, resources: list[dict]) -> Optional[dict]:
+    """Convert resource to timeline event. Returns None for cached tasks."""
+    if is_task_cached(res):
+        return None
     arn = re.split(r"[:/]", res["arn"])
     time0 = parse_time_str(resources[0].get("creationTime"))
     time1 = parse_time_str(res.get("creationTime"))
@@ -431,25 +432,40 @@ def get_timeline_event(res, resources):
     }
 
 
-def main(argv=None):
-    # Parse command-line options
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+
+def main(argv: Optional[list[str]] = None) -> None:
+    """Run the analyzer CLI with the given arguments."""
     opts = docopt.docopt(
         __doc__, version=f"v{importlib.metadata.version('aws-healthomics-tools')}", argv=argv
     )
     if opts["--verbose"]:
-        # print(opts, file=sys.stderr)
         logger.setLevel(logging.DEBUG)
 
     logger.debug("command line options: %s", opts)
+
+    try:
+        _run(opts)
+    except RunAnalyzerError as e:
+        exit(f"{EXENAME}: {e}")
+
+
+def _run(opts: dict) -> None:
+    """Core logic, separated from main() so errors propagate as exceptions."""
     try:
         session = boto3.Session(profile_name=opts["--profile"], region_name=opts["--region"])
-        pricing = session.client("pricing", region_name=PRICING_AWS_REGION)
-        pricing.describe_services(ServiceCode=OMICS_SERVICE_CODE)
+        pricing_client = session.client("pricing", region_name=PRICING_AWS_REGION)
+        pricing_client.describe_services(ServiceCode=OMICS_SERVICE_CODE)
     except Exception as e:
         die(e)
 
+    pricing_cache = PricingCache(pricing_client)
+
     # Retrieve workflow runs & tasks
-    runs = []
+    runs: list[dict] = []
     resources: list[dict] = []
     if opts["--file"]:
         with open(opts["--file"]) as f:
@@ -485,154 +501,28 @@ def main(argv=None):
                     list_of_resources.append(resources)
             batch.aggregate_and_print(
                 run_resources_list=list_of_resources,
-                pricing=pricing,
+                pricing_cache=pricing_cache,
                 engine=engine,
                 headroom=opts["--headroom"] or 0.0,
                 out=opts["--out"],
             )
-            exit(0)
+            return
 
     # Display output
     with open(opts["--out"] or sys.stdout.fileno(), "w") as out:
         if not resources:
-            # Show available runs
-            out.write("Workflow run IDs (<completionTime> <UUID>):\n")
-            for r in runs:
-                time0 = r["creationTime"] / 1000.0
-                time0 = datetime.datetime.fromtimestamp(time0)
-                time0 = time0.isoformat(timespec="seconds")
-                out.write(f"{r['id']} ({time0} {r['uuid']})\n")
+            _handle_list_runs(runs, out)
         elif opts["--show"]:
-            # Show run resources
-            out.write(json.dumps(resources, indent=2) + "\n")
+            _handle_show(resources, out)
         elif opts["--timeline"]:
-            # Show run timeline
-            hdrs = ["resource", "pending", "starting", "running"]
-            writer = csv.writer(out, lineterminator="\n")
-            writer.writerow(hdrs)
-            for res in resources:
-                event = get_timeline_event(res, resources)
-                row = [event.get(h, "") for h in hdrs]
-                writer.writerow(row)
+            _handle_timeline(resources, out)
         else:
-            headroom = 0.0
-            if opts["--headroom"]:
-                try:
-                    headroom = float(opts["--headroom"])
-                except Exception:
-                    die(f'the --headroom argument {opts["--headroom"]} is not a valid float value')
-                if headroom > 1.0 or headroom < 0.0:
-                    die(f"the --headroom argument {headroom} must be between 0.0 and 1.0")
-
-            # Show run statistics
-            def tocsv(val):
-                if val is None:
-                    return ""
-                return f"{val:f}" if type(val) is float else str(val)  # noqa E231
-
-            hdrs = [
-                "uuid",
-                "arn",
-                "type",
-                "name",
-                "startTime",
-                "stopTime",
-                "runningSeconds",
-                "cpus",
-                "gpus",
-                "memory",
-                "omicsInstanceTypeReserved",
-                "omicsInstanceTypeMinimum",
-                "recommendedCpus",
-                "recommendedMemoryGiB",
-                "estimatedUSD",
-                "minimumUSD",
-                "cpuUtilizationRatio",
-                "memoryUtilizationRatio",
-                "storageUtilizationRatio",
-                "cpusReserved",
-                "cpusMaximum",
-                "cpusAverage",
-                "gpusReserved",
-                "memoryReservedGiB",
-                "memoryMaximumGiB",
-                "memoryAverageGiB",
-                "storageReservedGiB",
-                "storageMaximumGiB",
-                "storageAverageGiB",
-            ]
-
-            # Rename these headers for consistency
-            hrdrs_map = {
-                "cpus": "cpusRequested",
-                "gpus": "gpusRequested",
-                "memory": "memoryRequestedGiB",
-            }
-
-            formatted_headers = [hrdrs_map.get(h, h) for h in hdrs]
-
-            writer = csv.writer(out, lineterminator="\n")
-            writer.writerow(formatted_headers)
-            config: dict = {}
-            omics = session.client("omics")
-            for res in resources:
-                add_metrics(res, resources, pricing, headroom)
-                metrics = res.get("metrics", {})
-                if opts["--write-config"]:
-                    if res["type"] == "run":
-                        wfid = res["workflow"].split("/")[-1]
-                        engine = utils.get_engine_from_id(wfid, omics, opts["--workflow-owner-id"])
-                    if res["type"] == "task":
-                        task_name = utils.task_base_name(res["name"], engine)
-                        if task_name not in config.keys():
-                            config[task_name] = {
-                                "cpus": metrics["recommendedCpus"],
-                                "mem": metrics["recommendedMemoryGiB"],
-                            }
-                        else:
-                            config[task_name] = {
-                                "cpus": max(metrics["recommendedCpus"], config[task_name]["cpus"]),
-                                "mem": max(
-                                    metrics["recommendedMemoryGiB"], config[task_name]["mem"]
-                                ),
-                            }
-                row = [tocsv(metrics.get(h, res.get(h))) for h in hdrs]
-                writer.writerow(row)
-
-            if opts["--write-config"]:
-                filename = opts["--write-config"]
-                writeconfig.create_config(engine, config, filename)
+            _handle_stats(resources, session, pricing_cache, opts, out)
         if opts["--out"]:
-            sys.stderr.write(f"{exename}: wrote {opts['--out']}\n")
+            sys.stderr.write(f"{EXENAME}: wrote {opts['--out']}\n")
+
     if opts["--plot"]:
-        if len(resources) < 1:
-            die("no resources to plot")
-
-        run = {}
-        for res in resources:
-            rtype = re.split(r"[:/]", res["arn"])[-2]
-            if rtype == "run":
-                run = res
-                resources.remove(res)  # we don't want the run in the data to plot
-                break
-
-        start = datetime.datetime.strptime(run["startTime"], "%Y-%m-%dT%H:%M:%S.%fZ")
-        stop = datetime.datetime.strptime(run["stopTime"], "%Y-%m-%dT%H:%M:%S.%fZ")
-        run_duration_hrs = (stop - start).total_seconds() / 3600
-
-        runid = run["arn"].split("/")[-1]
-        output_file_basename = f"{runid}_timeline"
-
-        # open or create the plot directory
-        plot_dir = opts["--plot"]
-        if not os.path.isdir(plot_dir):
-            os.makedirs(plot_dir)
-        output_file(
-            filename=os.path.join(plot_dir, f"{output_file_basename}.html"), title=runid, mode="cdn"
-        )
-        title = f"arn: {run['arn']}, name: {run.get('name')}"
-
-        timeline.plot_timeline(resources, title=title, max_duration_hrs=run_duration_hrs)
+        _handle_plot(resources, opts)
 
 
 if __name__ == "__main__":
