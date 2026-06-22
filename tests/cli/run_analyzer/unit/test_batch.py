@@ -2,6 +2,7 @@ import io
 import unittest
 
 import omics.cli.run_analyzer.batch as batch
+from omics.cli.run_analyzer.pricing import PricingCache
 
 
 class TestRunAnalyzerBatch(unittest.TestCase):
@@ -83,6 +84,9 @@ class TestRunAnalyzerBatch(unittest.TestCase):
         expected = f"{header_string}task,foo,4,20.0,30.0,8.165,1.0,0.75,1.0,0.75,0,0,4,8,omics.c.large,1.0,1.0\n"
         with io.StringIO() as result:
             batch.aggregate_and_print(
-                run_resources_list=resources_list, pricing={}, engine="WDL", out=result
+                run_resources_list=resources_list,
+                pricing_cache=PricingCache(),
+                engine="WDL",
+                out=result,
             )
             self.assertEqual(result.getvalue(), expected)
