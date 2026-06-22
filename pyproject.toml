@@ -29,7 +29,7 @@ docopt = "^0.6.2"
 python-dateutil = "^2.8.2"
 bokeh = "^3.8.1"
 pandas = "^2.3.3"
-tornado = ">=6.5.0"  # Added to fix security vulnerability
+tornado = ">=6.5.7"  # Added to fix security vulnerability
 pillow = ">=12.2.0"
 pygments = ">=2.20.0"
 requests = ">=2.33.0"
