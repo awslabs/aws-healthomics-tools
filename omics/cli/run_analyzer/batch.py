@@ -45,32 +45,35 @@ def aggregate_and_print(
         )
 
     # Resolve output target
-    if out is None:
-        output = sys.stdout
-    elif isinstance(out, str):
-        output = open(out, "w")
-    else:
-        output = out
+    opened_file: Optional[IO[str]] = None
+    try:
+        if out is None:
+            output = sys.stdout
+        elif isinstance(out, str):
+            opened_file = open(out, "w")
+            output = opened_file
+        else:
+            output = out
 
-    task_names: set[str] = set()
-    for run_resources in run_resources_list:
-        for res in list(run_resources):
-            # skip resources that are not tasks
-            if "task" not in res["arn"]:
-                run_resources.remove(res)
-                continue
-            add_metrics(res, run_resources, pricing_cache, headroom)
-            task_names.add(utils.task_base_name(res["name"], engine))
+        task_names: set[str] = set()
+        for run_resources in run_resources_list:
+            for res in list(run_resources):
+                # skip resources that are not tasks
+                if "task" not in res["arn"]:
+                    run_resources.remove(res)
+                    continue
+                add_metrics(res, run_resources, pricing_cache, headroom)
+                task_names.add(utils.task_base_name(res["name"], engine))
 
-    # print headers
-    print(",".join(hdrs), file=output)
+        # print headers
+        print(",".join(hdrs), file=output)
 
-    task_names_sorted = sorted(task_names)
-    for task_name in task_names_sorted:
-        _aggregate_resources(run_resources_list, task_name, engine, output)
-
-    if isinstance(out, str):
-        output.close()
+        task_names_sorted = sorted(task_names)
+        for task_name in task_names_sorted:
+            _aggregate_resources(run_resources_list, task_name, engine, output)
+    finally:
+        if opened_file is not None:
+            opened_file.close()
 
 
 def _aggregate_resources(
