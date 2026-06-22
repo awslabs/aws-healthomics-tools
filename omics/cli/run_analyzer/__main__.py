@@ -223,9 +223,13 @@ def _handle_timeline(resources: list[dict], out: IO[str]) -> None:
     hdrs = ["resource", "pending", "starting", "running"]
     writer = csv.writer(out, lineterminator="\n")
     writer.writerow(hdrs)
+
+    # Separate the run resource from task resources (mirrors _handle_plot logic)
+    tasks = [res for res in resources if re.split(r"[:/]", res["arn"])[-2] != "run"]
+
     cached_tasks: list[str] = []
     executed_tasks = 0
-    for res in resources:
+    for res in tasks:
         event = _get_timeline_event(res, resources)
         if event is None:
             cached_tasks.append(res.get("name", res.get("arn", "unknown")))
@@ -353,6 +357,9 @@ def _handle_plot(resources: list[dict], opts: dict) -> None:
             run = res
             plot_resources.remove(res)
             break
+
+    if not run:
+        die("no run resource found in workflow run data")
 
     # Identify cached tasks before plotting
     cached_tasks = [res for res in plot_resources if is_task_cached(res)]

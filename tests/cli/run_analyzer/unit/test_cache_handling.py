@@ -82,10 +82,10 @@ class TestHandleTimelinePartialCache(unittest.TestCase):
 
         csv_output = out.getvalue()
         lines = csv_output.strip().split("\n")
-        # Header + 2 executed resources (run + align_reads)
-        self.assertEqual(len(lines), 3)
+        # Header + 1 executed task (align_reads); the run resource is excluded
+        self.assertEqual(len(lines), 2)
         self.assertIn("resource,pending,starting,running", lines[0])
-        self.assertIn("align_reads", lines[2])
+        self.assertIn("align_reads", lines[1])
 
     def test_partial_cache_reports_cached_tasks_to_stderr(self):
         out = io.StringIO()
@@ -97,7 +97,7 @@ class TestHandleTimelinePartialCache(unittest.TestCase):
             stderr_output = sys.stderr.getvalue()
             sys.stderr = old_stderr
 
-        self.assertIn("2/4", stderr_output)
+        self.assertIn("2/3", stderr_output)
         self.assertIn("cached_task_1", stderr_output)
         self.assertIn("cached_task_2", stderr_output)
         self.assertIn("call cache", stderr_output)

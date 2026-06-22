@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import datetime
 import math
 import re
 import sys
 from typing import Optional
+
+import dateutil.parser  # type: ignore[import-untyped]
 
 from . import utils
 from .pricing import PricingCache
@@ -19,10 +22,6 @@ PRICE_RESOURCE_TYPE_STATIC_RUN_STORAGE = "Run Storage"
 
 def parse_time_str(s: Optional[str], utc: bool = True):
     """Parse an ISO time string, returning None if input is falsy."""
-    import datetime
-
-    import dateutil.parser
-
     tz = datetime.timezone.utc
     return dateutil.parser.parse(s).replace(tzinfo=tz) if s else None
 
