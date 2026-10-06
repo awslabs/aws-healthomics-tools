@@ -491,6 +491,79 @@ These statics are reported in CSV format:
 - __"maximumEstimatedUSD"__: The largest estimated cost observed for the named task.
 - __"meanEstimatedUSD"__: The average estimated cost observed for the named task.
 
+### HealthOmics Run Dashboard
+
+The `run_dashboard` tool builds an Amazon CloudWatch dashboard of per-workflow
+resource utilization from the HealthOmics vended run metrics (the `aws.omics.*`
+OpenTelemetry metrics; see
+https://docs.aws.amazon.com/omics/latest/dev/monitoring-run-metrics.html).
+
+The dashboard has one row per workflow and five plots per row — CPU
+utilization %, memory utilization %, filesystem I/O (read/write), network I/O
+(receive/transmit), and run shared-filesystem usage — each plotting the average
+and p99 across the workflow's tasks/runs. CPU and memory utilization are
+computed per task (`usage / limit`) and then aggregated, which is correct even
+when a workflow's tasks request different amounts of CPU/memory.
+
+There are two ways to set the dashboard up: run the `run_dashboard` CLI command,
+or deploy the one-click CloudFormation stack described below. Both produce the
+same dashboard; pick whichever fits your workflow.
+
+#### Option 1 — CLI
+
+For an overview and the available options run:
+
+    aws-healthomics-tools run_dashboard -h
+
+Your run service role must have `cloudwatch:PutMetricData` so the metrics exist.
+The tool only touches the single dashboard it manages — it creates/updates it
+(`cloudwatch:PutDashboard`) or deletes it (`cloudwatch:DeleteDashboards`, with
+`--delete`); it never creates, deletes, or modifies workflows or runs. Panel
+titles use the real workflow name (resolved with the read-only
+`omics:GetWorkflow`), falling back to `workflow-<n>` if the name cannot be
+resolved.
+
+Pass the workflow ids to chart with `-i`. The following builds a dashboard named
+`omics-workflow-usage` in `us-west-2` for two workflows:
+
+    aws-healthomics-tools run_dashboard -i 1234567,2345678 -r us-west-2 -d omics-workflow-usage
+
+Preview the dashboard body without creating anything:
+
+    aws-healthomics-tools run_dashboard -i 1234567 --dry-run
+
+Delete a dashboard you created (by name — no workflow ids needed):
+
+    aws-healthomics-tools run_dashboard --delete -d omics-workflow-usage -r us-west-2
+
+Options:
+
+* `-i, --workflow-ids` — comma-separated workflow ids to chart (required unless `--delete`).
+* `-r, --region` — AWS Region (default `us-west-2`).
+* `-d, --dashboard-name` — CloudWatch dashboard name (default `omics-workflow-usage`).
+* `--dry-run` — print the dashboard body instead of creating the dashboard.
+* `--delete` — delete the dashboard named by `--dashboard-name` instead of creating it.
+
+#### Option 2 — one-click CloudFormation stack
+
+If you'd rather not install the CLI, deploy the template at
+[`cloudformation/omics-dashboard-oneclick.json`](cloudformation/omics-dashboard-oneclick.json).
+It creates a single `AWS::CloudWatch::Dashboard` for 1–6 workflow ids and needs
+no code or dependencies. Deploy it from the console (CloudFormation → Create
+stack → upload the template) or from the CLI:
+
+    aws cloudformation deploy \
+      --template-file cloudformation/omics-dashboard-oneclick.json \
+      --stack-name omics-workflow-usage \
+      --parameter-overrides WorkflowId1=1234567 WorkflowId2=2345678
+
+Parameters: `DashboardName` (default `omics-workflow-usage`), `WorkflowId1`
+(required), and `WorkflowId2`–`WorkflowId6` (optional; leave blank to omit a
+row). The stack deploys into the Region of the CloudFormation stack and outputs
+the dashboard console URL. Because CloudFormation does not call
+`omics:GetWorkflow`, the CloudFormation panels are titled by workflow id rather
+than name — the one behavioral difference from the CLI.
+
 ## Security
 
 See [CONTRIBUTING](https://github.com/awslabs/amazon-omics-tools/blob/main/CONTRIBUTING.md#security-issue-notifications) for more information.
