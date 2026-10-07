@@ -40,6 +40,17 @@ class TestAho(unittest.TestCase):
 
         mock_rerun_main.assert_called_once_with(["1234567"])
 
+    @mock.patch("docopt.docopt")
+    @mock.patch("omics.cli.run_dashboard.__main__.main")
+    def test_main_run_dashboard(self, mock_run_dashboard_main, mock_docopt):
+        """Test that the run_dashboard command is correctly routed."""
+        mock_docopt.return_value = {"run_dashboard": True}
+        sys.argv = ["aho", "run_dashboard", "-i", "1234567"]
+
+        main()
+
+        mock_run_dashboard_main.assert_called_once_with(["-i", "1234567"])
+
 
 if __name__ == "__main__":
     unittest.main()

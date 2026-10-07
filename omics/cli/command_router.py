@@ -4,6 +4,7 @@ CLI Tools for working with the AWS HealthOmics Service.
 Usage:
   aho run_analyzer [<args>...]
   aho rerun [<args>...]
+  aho run_dashboard [<args>...]
 """
 
 import sys
@@ -25,6 +26,10 @@ def main():
             from omics.cli.rerun.__main__ import main as rerun_main
 
             rerun_main(sub_args)
+        elif command == "run_dashboard":
+            from omics.cli.run_dashboard.__main__ import main as run_dashboard_main
+
+            run_dashboard_main(sub_args)
         else:
             print("Unknown or missing command.")
             print(__doc__)
