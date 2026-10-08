@@ -26,7 +26,10 @@ SDK and CLI Tools for working with the AWS HealthOmics Service.
       - [Output workflow run manifest in JSON format](#output-workflow-run-manifest-in-json-format)
       - [Output optimized configuration (for Nextflow)](#output-optimized-configuration)
       - [Aggregate scattered tasks and multiple runs (batch mode)](#aggregate-scattered-tasks-and-multiple-runs-batch-mode)
-      
+    - [HealthOmics Run Dashboard](#healthomics-run-dashboard)
+      - [Option 1 — CLI](#option-1--cli)
+      - [Option 2 — one-click CloudFormation stack](#option-2--one-click-cloudformation-stack)
+
   - [Security](#security)
   - [License](#license)
 
@@ -498,12 +501,14 @@ resource utilization from the HealthOmics vended run metrics (the `aws.omics.*`
 OpenTelemetry metrics; see
 https://docs.aws.amazon.com/omics/latest/dev/monitoring-run-metrics.html).
 
-The dashboard has one row per workflow and five plots per row — CPU
+The dashboard has one row per workflow and six plots per row — CPU
 utilization %, memory utilization %, filesystem I/O (read/write), network I/O
-(receive/transmit), and run shared-filesystem usage — each plotting the average
-and p99 across the workflow's tasks/runs. CPU and memory utilization are
-computed per task (`usage / limit`) and then aggregated, which is correct even
-when a workflow's tasks request different amounts of CPU/memory.
+(receive/transmit), run shared-filesystem usage, and scratch storage usage —
+each plotting the average and p99 across the workflow's tasks/runs. CPU and
+memory utilization are computed per task (`usage / limit`) and then aggregated,
+which is correct even when a workflow's tasks request different amounts of
+CPU/memory. Scratch storage usage is the per-task local scratch metric
+(`aws.omics.task.filesystem.scratch.storage.usage`).
 
 There are two ways to set the dashboard up: run the `run_dashboard` CLI command,
 or deploy the one-click CloudFormation stack described below. Both produce the

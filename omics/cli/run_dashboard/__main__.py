@@ -42,14 +42,15 @@ MEM_LIMIT = "aws.omics.task.memory.limit"
 FS_IO = "aws.omics.task.filesystem.io"
 NET_IO = "aws.omics.task.network.io"
 RUN_FS_USAGE = "aws.omics.run.filesystem.usage"
+SCRATCH_USAGE = "aws.omics.task.filesystem.scratch.storage.usage"
 
 WORKFLOW_LABEL = "@resource.aws.omics.workflow.id"
 TASK_LABEL = "@resource.aws.omics.task.id"
 
 _HEADER_HEIGHT = 2
 _ROW_HEIGHT = 6
-# Five plots across a 24-wide dashboard: (x, width).
-_COLUMN_LAYOUT = [(0, 5), (5, 5), (10, 5), (15, 5), (20, 4)]
+# Six plots across a 24-wide dashboard: (x, width).
+_COLUMN_LAYOUT = [(0, 4), (4, 4), (8, 4), (12, 4), (16, 4), (20, 4)]
 _STYLE = {
     "label": {"position": "inside", "show": False},
     "lineOptions": {
@@ -86,8 +87,12 @@ def _directional_selector(
     return f'{{"{metric}", "{WORKFLOW_LABEL}"="{workflow_id}", "{direction_label}"="{direction}"}}'
 
 
+def _metric_selector(metric: str, workflow_id: str) -> str:
+    return f'{{"{metric}", "{WORKFLOW_LABEL}"="{workflow_id}"}}'
+
+
 def _run_fs_selector(workflow_id: str) -> str:
-    return f'{{"{RUN_FS_USAGE}", "{WORKFLOW_LABEL}"="{workflow_id}"}}'
+    return _metric_selector(RUN_FS_USAGE, workflow_id)
 
 
 def _promql_query(query_id: str, expr: str, label: str) -> dict:
@@ -132,7 +137,7 @@ def _avg_p99(prefix: str, expr: str) -> List[dict]:
 
 
 def build_dashboard_body(region: str, workflows: List[Tuple[str, str]]) -> dict:
-    """Build the full dashboard body in Python (one row per workflow, 5 plots each).
+    """Build the full dashboard body in Python (one row per workflow, 6 plots each).
 
     ``workflows`` is a list of ``(workflow_id, workflow_name)`` tuples. Each plot
     shows the average and p99 across the workflow's tasks/runs. Panel titles use
@@ -148,12 +153,14 @@ def build_dashboard_body(region: str, workflows: List[Tuple[str, str]]) -> dict:
             "properties": {
                 "markdown": (
                     f"# HealthOmics Workflow Usage \u2014 {len(workflows)} workflow(s)\n"
-                    "**One row per workflow, 5 plots each** (avg + p99 across tasks/runs): "
+                    "**One row per workflow, 6 plots each** (avg + p99 across tasks/runs): "
                     "CPU utilization %, memory utilization %, filesystem I/O (read/write), "
-                    "network I/O (receive/transmit), run shared-filesystem usage.\n"
+                    "network I/O (receive/transmit), run shared-filesystem usage, scratch "
+                    "storage usage.\n"
                     "CPU/memory are per-task usage/limit, aggregated with avg / p99. Run "
                     "filesystem usage is DYNAMIC-lagged (>30 min) and only non-zero for "
-                    "workflows that use the shared filesystem."
+                    "workflows that use the shared filesystem. Scratch storage usage is "
+                    "per-task local scratch (DYNAMIC/SHARED mode lags up to 20 min)."
                 )
             },
         }
@@ -168,6 +175,7 @@ def build_dashboard_body(region: str, workflows: List[Tuple[str, str]]) -> dict:
         net_recv = _directional_selector(NET_IO, workflow_id, "network.io.direction", "receive")
         net_xmit = _directional_selector(NET_IO, workflow_id, "network.io.direction", "transmit")
         run_fs = _run_fs_selector(workflow_id)
+        scratch = _metric_selector(SCRATCH_USAGE, workflow_id)
 
         widgets.append(
             _chart(
@@ -231,6 +239,17 @@ def build_dashboard_body(region: str, workflows: List[Tuple[str, str]]) -> dict:
                 _COLUMN_LAYOUT[4][1],
                 f"{name} \u2014 Run FS usage (By)",
                 _avg_p99("rfs", run_fs),
+                "bytes",
+            )
+        )
+        widgets.append(
+            _chart(
+                region,
+                _COLUMN_LAYOUT[5][0],
+                y,
+                _COLUMN_LAYOUT[5][1],
+                f"{name} \u2014 Scratch storage usage (By)",
+                _avg_p99("scr", scratch),
                 "bytes",
             )
         )
