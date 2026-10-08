@@ -27,6 +27,7 @@ SDK and CLI Tools for working with the AWS HealthOmics Service.
       - [Output optimized configuration (for Nextflow)](#output-optimized-configuration)
       - [Aggregate scattered tasks and multiple runs (batch mode)](#aggregate-scattered-tasks-and-multiple-runs-batch-mode)
     - [HealthOmics Run Dashboard](#healthomics-run-dashboard)
+      - [Example](#example)
       - [Option 1 — CLI](#option-1--cli)
       - [Option 2 — one-click CloudFormation stack](#option-2--one-click-cloudformation-stack)
 
@@ -513,6 +514,12 @@ CPU/memory. Scratch storage usage is the per-task local scratch metric
 There are two ways to set the dashboard up: run the `run_dashboard` CLI command,
 or deploy the one-click CloudFormation stack described below. Both produce the
 same dashboard; pick whichever fits your workflow.
+
+#### Example
+
+The generated dashboard looks like this (three workflows, six plots per row):
+
+![Example HealthOmics run dashboard with one row per workflow and six plots per row](assets/screenshot-sample-dashboard.png)
 
 #### Option 1 — CLI
 
