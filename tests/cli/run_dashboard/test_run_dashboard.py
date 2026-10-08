@@ -27,11 +27,28 @@ class UtilizationExprTest(unittest.TestCase):
 
 
 class BuildDashboardBodyTest(unittest.TestCase):
-    def test_one_row_per_workflow_five_plots_each(self):
+    def test_one_row_per_workflow_six_plots_each(self):
         body = build_dashboard_body("us-west-2", [("111", "wf-a"), ("222", "wf-b")])
         charts = [w for w in body["widgets"] if w["type"] == "chart"]
-        self.assertEqual(len(charts), 10)  # 2 workflows x 5 plots
+        self.assertEqual(len(charts), 12)  # 2 workflows x 6 plots
         json.dumps(body)  # serializable
+
+    def test_includes_scratch_storage_plot(self):
+        body = build_dashboard_body("us-west-2", [("111", "wf-a")])
+        charts = [w for w in body["widgets"] if w["type"] == "chart"]
+        titles = [c["properties"]["title"] for c in charts]
+        scratch = next(
+            c for c in charts if c["properties"]["title"].endswith("Scratch storage usage (By)")
+        )
+        # Charts the per-task scratch metric for the workflow, avg + p99.
+        queries = scratch["properties"]["data"]["queries"]
+        combined = " ".join(x["query"] for x in queries)
+        self.assertIn("aws.omics.task.filesystem.scratch.storage.usage", combined)
+        self.assertIn('"@resource.aws.omics.workflow.id"="111"', combined)
+        labels = [x["label"] for x in queries]
+        self.assertEqual(labels, ["avg", "p99"])
+        # Six distinct plots per workflow row.
+        self.assertEqual(len(titles), 6)
 
     def test_title_is_name_only_and_region_applied(self):
         body = build_dashboard_body("eu-west-1", [("999", "my-wf")])
