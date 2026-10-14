@@ -11,11 +11,13 @@ Usage: omics-run-analyzer [<runId>...]
                           [--headroom=<float>]
                           [--write-config=<path>]
                           [--workflow-owner-id=<value>]
+                          [--cloudwatch]
                           [--verbose]
        omics-run-analyzer --timeline <runId> [--profile=<profile>] [--region=<region>] [--vebose]
        omics-run-analyzer --time <interval>  [--profile=<profile>] [--region=<region>] [--vebose]
        omics-run-analyzer --batch <runId>... [--profile=<profile>] [--region=<region>] [--headroom=<float>]
-                                             [--out=<path>] [--workflow-owner-id=<value>] [--verbose]
+                                             [--out=<path>] [--workflow-owner-id=<value>] [--cloudwatch]
+                                             [--verbose]
        omics-run-analyzer (-h --help)
        omics-run-analyzer --version
 
@@ -28,6 +30,9 @@ Arguments:
 Options:
  -b, --batch                    Analyze one or more runs and generate aggregate stastics on repeated or scattered tasks
  -c, --write-config=<path>      Output a config file with recommended resources (Nextflow only)
+ --cloudwatch                   Enrich the analysis with HealthOmics run metrics from CloudWatch
+                                (requires cloudwatch:GetMetricData and cloudwatch:ListMetrics;
+                                runs without metrics fall back to the run manifest)
  -f, --file=<path>              Load input from file
  -H, --headroom=<float>         Adds a fractional buffer to the size of recommended memory and CPU. Values must be between 0.0 and 1.0.
  -o, --out=<path>               Write output to file
@@ -61,6 +66,8 @@ Examples:
  omics-run-analyzer 1234567 -P timeline -H 0.1
  # Analyze multiple runs and output aggregate statistics to a file
  omics-run-analyzer -b 1234567 2345678 3456789 -o out.csv
+ # Use CloudWatch run metrics (CPU p95, peak memory, scratch, GPU, I/O) in the analysis
+ omics-run-analyzer 1234567 --cloudwatch -o run-1234567.csv
 """
 
 from __future__ import annotations
@@ -82,6 +89,7 @@ from bokeh.plotting import output_file
 from . import batch  # type: ignore
 from . import timeline  # type: ignore
 from . import utils, writeconfig
+from .cwmetrics import CW_INCOMPLETE_KEY, CW_KEY, CloudWatchMetricsFetcher
 from .exceptions import RunAnalyzerError
 from .metrics import add_metrics, parse_time_str
 from .pricing import PRICING_AWS_REGION, PricingCache
@@ -96,9 +104,55 @@ OMICS_LOG_GROUP = "/aws/omics/WorkflowLog"
 OMICS_SERVICE_CODE = "AmazonOmics"
 
 
+CLOUDWATCH_HEADERS = [
+    "metricsSource",
+    "cwCpusMaximum",
+    "cwCpusP95",
+    "cwCpusAverage",
+    "cwCpuUtilizationRatio",
+    "cpuIdleFraction",
+    "cwMemoryMaximumGiB",
+    "cwMemoryP95GiB",
+    "cwMemoryAverageGiB",
+    "cwMemoryUtilizationRatio",
+    "memoryPressure",
+    "scratchStorageMode",
+    "scratchMaximumGiB",
+    "scratchLimitGiB",
+    "scratchUtilizationRatio",
+    "scratchPressure",
+    "gpuUtilizationAverage",
+    "gpuUtilizationMaximum",
+    "gpuMemoryMaximumGiB",
+    "gpusIdle",
+    "recommendedGpus",
+    "cwStorageMaximumGiB",
+    "fsReadGiB",
+    "fsWriteGiB",
+    "fsReadOps",
+    "fsWriteOps",
+    "netReceiveGiB",
+    "netTransmitGiB",
+    "fsThroughputMiBps",
+    "fsOpsPerSecond",
+    "netThroughputMiBps",
+    "ioBound",
+]
+
+
 def die(msg: object) -> NoReturn:
     """Show error message and terminate."""
     raise RunAnalyzerError(str(msg))
+
+
+def warn(msg: str) -> None:
+    """Write a non-fatal notice to stderr."""
+    sys.stderr.write(f"{EXENAME}: {msg}\n")
+
+
+def has_cloudwatch_metrics(resources: list[dict]) -> bool:
+    """Return True if any resource carries CloudWatch run metrics."""
+    return any(res.get(CW_KEY) for res in resources)
 
 
 def parse_time_delta(s: str) -> datetime.timedelta:
@@ -304,6 +358,8 @@ def _handle_stats(
         "storageMaximumGiB",
         "storageAverageGiB",
     ]
+    if has_cloudwatch_metrics(resources):
+        hdrs += CLOUDWATCH_HEADERS
 
     hrdrs_map = {
         "cpus": "cpusRequested",
@@ -344,7 +400,9 @@ def _handle_stats(
         writeconfig.create_config(engine, config, filename)
 
 
-def _handle_plot(resources: list[dict], opts: dict) -> None:
+def _handle_plot(
+    resources: list[dict], opts: dict, fetcher: Optional[CloudWatchMetricsFetcher] = None
+) -> None:
     """Generate a Bokeh HTML timeline plot."""
     if len(resources) < 1:
         die("no resources to plot")
@@ -399,7 +457,13 @@ def _handle_plot(resources: list[dict], opts: dict) -> None:
     if cached_tasks:
         title += f" ({len(cached_tasks)} cached tasks not shown)"
 
-    timeline.plot_timeline(executed_tasks, title=title, max_duration_hrs=run_duration_hrs)
+    utilization = fetcher.utilization(resources) if fetcher else None
+    timeline.plot_timeline(
+        executed_tasks,
+        title=title,
+        max_duration_hrs=run_duration_hrs,
+        utilization=utilization,
+    )
 
 
 def _handle_list_runs(runs: list[dict], out: IO[str]) -> None:
@@ -470,6 +534,7 @@ def _run(opts: dict) -> None:
         die(e)
 
     pricing_cache = PricingCache(pricing_client)
+    fetcher = CloudWatchMetricsFetcher(session, warn=warn) if opts["--cloudwatch"] else None
 
     # Retrieve workflow runs & tasks
     runs: list[dict] = []
@@ -495,6 +560,8 @@ def _run(opts: dict) -> None:
             engine = ""
             for run in runs:
                 resources = get_run_resources(logs, run)
+                if fetcher and resources:
+                    fetcher.attach(resources)
                 run_engine = utils.get_engine(
                     workflow_arn=resources[0]["workflow"],
                     client=session.client("omics"),
@@ -515,6 +582,14 @@ def _run(opts: dict) -> None:
             )
             return
 
+    if fetcher and resources and not opts["--timeline"]:
+        fetcher.attach(resources)
+    elif not fetcher:
+        # CloudWatch data embedded in a --file input is only used with --cloudwatch
+        for res in resources:
+            res.pop(CW_KEY, None)
+            res.pop(CW_INCOMPLETE_KEY, None)
+
     # Display output
     with open(opts["--out"] or sys.stdout.fileno(), "w") as out:
         if not resources:
@@ -529,7 +604,7 @@ def _run(opts: dict) -> None:
             sys.stderr.write(f"{EXENAME}: wrote {opts['--out']}\n")
 
     if opts["--plot"]:
-        _handle_plot(resources, opts)
+        _handle_plot(resources, opts, fetcher)
 
 
 if __name__ == "__main__":

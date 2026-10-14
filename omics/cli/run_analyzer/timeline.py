@@ -1,5 +1,6 @@
+import math
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd  # type: ignore
 from bokeh.layouts import column
@@ -69,8 +70,49 @@ def _get_task_timings_data(tasks, time_units="min"):
     return pd.DataFrame.from_records(filtered_tasks).sort_values("creationTime")
 
 
-def plot_timeline(tasks, title="", time_units="min", max_duration_hrs=5, show_plot=True):
-    """Plot a time line figure for supplied tasks"""
+def _utilization_figures(utilization, tare, time_units, x_range):
+    """Line charts of run-wide vCPU and memory usage vs reserved (CloudWatch data)."""
+    time_scale_factor = TIME_SCALE_FACTORS[time_units]
+    x = [
+        (datetime.fromtimestamp(t, tz=timezone.utc).replace(tzinfo=None) - tare).total_seconds()
+        * time_scale_factor
+        for t in utilization["time"]
+    ]
+
+    def ys(name):
+        # None -> NaN so Bokeh draws a gap instead of failing
+        return [math.nan if v is None else v for v in utilization.get(name, [])]
+
+    figures = []
+    for used, reserved, label in (
+        ("cpuUsage", "cpuLimit", "vCPUs"),
+        ("memoryUsageGiB", "memoryLimitGiB", "memory (GiB)"),
+    ):
+        fig = figure(
+            width=960,
+            height=250,
+            sizing_mode="stretch_width",
+            x_range=x_range,
+            title=f"{label} used vs reserved across all tasks (CloudWatch run metrics)",
+        )
+        fig.line(x, ys(used), legend_label="used", line_width=2, color="cornflowerblue")
+        fig.line(x, ys(reserved), legend_label="reserved", line_dash="dashed", color="grey")
+        fig.xaxis.axis_label = f"task execution time ({time_units})"
+        fig.yaxis.axis_label = label
+        fig.legend.location = "top_right"
+        figures.append(fig)
+    return figures
+
+
+def plot_timeline(
+    tasks, title="", time_units="min", max_duration_hrs=5, show_plot=True, utilization=None
+):
+    """Plot a time line figure for supplied tasks
+
+    ``utilization`` optionally holds run-wide CloudWatch usage/limit series (see
+    ``CloudWatchMetricsFetcher.utilization``); when present, vCPU and memory
+    charts are drawn below the timeline on the same time axis.
+    """
     time_scale_factor = TIME_SCALE_FACTORS[time_units]
     data = _get_task_timings_data(tasks, time_units=time_units)
     if data.empty:
@@ -141,7 +183,17 @@ def plot_timeline(tasks, title="", time_units="min", max_duration_hrs=5, show_pl
 
     layout = column(Div(text=f"<strong>{title}</strong>"), p_run)
 
-    if show_plot:
+    if utilization and utilization.get("time"):
+        tare = _parse_time_str(min_creation_time)
+        extra = _utilization_figures(utilization, tare, time_units, p_run.x_range)
+        # stretch_both would collapse inside a column; keep the timeline's height
+        p_run.sizing_mode = "stretch_width"
+        layout = column(
+            Div(text=f"<strong>{title}</strong>"), p_run, *extra, sizing_mode="stretch_width"
+        )
+        if show_plot:
+            show(layout)
+    elif show_plot:
         show(p_run)
 
     return layout

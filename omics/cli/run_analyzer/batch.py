@@ -7,7 +7,7 @@ import sys
 from typing import IO, Optional, Union
 
 from . import utils
-from .metrics import add_metrics
+from .metrics import CW_KEY, add_metrics
 from .pricing import PricingCache
 
 hdrs = [
@@ -28,6 +28,29 @@ hdrs = [
     "recommendOmicsInstanceType",
     "maximumEstimatedUSD",
     "meanEstimatedUSD",
+]
+
+# Appended when any task carries CloudWatch run metrics. Aggregated over the
+# tasks that have a value; tasks without CloudWatch data are not counted as 0.
+cloudwatch_hdrs = [
+    "maximumCwCpusP95",
+    "maximumCwCpuUtilizationRatio",
+    "meanCwCpuUtilizationRatio",
+    "meanCpuIdleFraction",
+    "maximumCwMemoryMaximumGiB",
+    "maximumCwMemoryUtilizationRatio",
+    "meanCwMemoryUtilizationRatio",
+    "anyMemoryPressure",
+    "maximumScratchMaximumGiB",
+    "maximumScratchUtilizationRatio",
+    "anyScratchPressure",
+    "maximumGpuUtilizationMaximum",
+    "maximumRecommendedGpus",
+    "maximumFsThroughputMiBps",
+    "meanFsThroughputMiBps",
+    "maximumNetThroughputMiBps",
+    "anyIoBound",
+    "cloudwatchCount",
 ]
 
 
@@ -65,19 +88,28 @@ def aggregate_and_print(
                 add_metrics(res, run_resources, pricing_cache, headroom)
                 task_names.add(utils.task_base_name(res["name"], engine))
 
+        use_cw = any(
+            res.get(CW_KEY) for run_resources in run_resources_list for res in run_resources
+        )
+        columns = hdrs + cloudwatch_hdrs if use_cw else hdrs
+
         # print headers
-        print(",".join(hdrs), file=output)
+        print(",".join(columns), file=output)
 
         task_names_sorted = sorted(task_names)
         for task_name in task_names_sorted:
-            _aggregate_resources(run_resources_list, task_name, engine, output)
+            _aggregate_resources(run_resources_list, task_name, engine, output, columns)
     finally:
         if opened_file is not None:
             opened_file.close()
 
 
 def _aggregate_resources(
-    run_resources_list: list[list[dict]], task_base_name: str, engine: str, out: IO[str]
+    run_resources_list: list[list[dict]],
+    task_base_name: str,
+    engine: str,
+    out: IO[str],
+    columns: Optional[list[str]] = None,
 ) -> None:
     """Aggregate resources with the same base name."""
     run_tasks_with_name: list[dict] = []
@@ -116,7 +148,37 @@ def _aggregate_resources(
         else:
             raise ValueError(f"Unhandled aggregation for key: {k}")
 
-    print(",".join([str(aggregate.get(h, "")) for h in hdrs]), file=out)
+    columns = columns or hdrs
+    for k in columns:
+        if k in cloudwatch_hdrs:
+            aggregate[k] = _aggregate_optional(run_tasks_with_name, k)
+
+    print(
+        ",".join(["" if aggregate.get(h) is None else str(aggregate[h]) for h in columns]), file=out
+    )
+
+
+def _aggregate_optional(resources_list: list[dict], column: str):
+    """Aggregate a CloudWatch-derived column, ignoring tasks without a value."""
+    if column == "cloudwatchCount":
+        return sum(1 for r in resources_list if r.get(CW_KEY))
+    for prefix, op in (("maximum", "maximum"), ("mean", "mean"), ("any", "any")):
+        if column.startswith(prefix):
+            rest = column[len(prefix) :]
+            key = rest[0].lower() + rest[1:]
+            break
+    else:  # pragma: no cover - guarded by cloudwatch_hdrs
+        raise ValueError(f"Unhandled aggregation for key: {column}")
+    values = [
+        r["metrics"][key] for r in resources_list if r.get("metrics", {}).get(key) is not None
+    ]
+    if not values:
+        return None
+    if op == "any":
+        return any(values)
+    if op == "maximum":
+        return round(max(values), 4)
+    return round(statistics.mean(values), 4)
 
 
 def _do_aggregation(resources_list: list[dict], resource_key: str, operation: str):

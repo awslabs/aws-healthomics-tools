@@ -23,6 +23,7 @@ SDK and CLI Tools for working with the AWS HealthOmics Service.
       - [Analyze a specific workflow run](#analyze-a-specific-workflow-run)
       - [Run optimization and estimated cost reduction](#run-optimization-and-estimated-cost-reduction)
         - [Adding headroom to recommendations](#add-headroom-to-recommendations)
+      - [Use CloudWatch run metrics](#use-cloudwatch-run-metrics)
       - [Output workflow run manifest in JSON format](#output-workflow-run-manifest-in-json-format)
       - [Output optimized configuration (for Nextflow)](#output-optimized-configuration)
       - [Aggregate scattered tasks and multiple runs (batch mode)](#aggregate-scattered-tasks-and-multiple-runs-batch-mode)
@@ -426,6 +427,39 @@ The `-H` or `--headroom` flag can be use to add an additional `0.0` to `1.0` tim
 the `omicsInstanceTypeMinimum` recommendation. For example if a task used a max of 3.6 GiB of memory and the headroom value is 0.5 then 6 GiB of memory - `math.ceil(3.6 * (1 + 0.5))` - will be used to determine the minimum instance type that should be used.
 
 If your analyzed run is already close to optimal then adding headroom might result in the recommended minimum instance being larger than the instance used in the run which will also cause the "`minimumUSD`" to be larger than the "`estimatedUSD`".
+
+#### Use CloudWatch run metrics
+
+HealthOmics publishes near real-time [run metrics](https://docs.aws.amazon.com/omics/latest/dev/monitoring-run-metrics.html) (`aws.omics.*`) to CloudWatch for runs whose service role allows `cloudwatch:PutMetricData`. Add `--cloudwatch` to include them in the analysis:
+
+```bash
+aws-healthomics-tools run_analyzer 1234567 --cloudwatch -o run-1234567.csv
+```
+
+The metrics are queried with PromQL in the run's region. This requires `cloudwatch:GetMetricData` and `cloudwatch:ListMetrics`, and CloudWatch bills PromQL API queries per million samples scanned (a typical run analysis scans very few samples). Run the analyzer in the account that started the run; metrics are not available in other accounts.
+
+When any task has CloudWatch data, these columns are appended to the CSV (cells are blank where a metric is unavailable):
+
+* __metricsSource__ : Which source determined the CPU and memory sizing basis: `cloudwatch` (both), `mixed` (one of them) or `manifest` (neither, e.g. no CloudWatch data, or the manifest memory peak was higher)
+* __cwCpusMaximum__, __cwCpusP95__, __cwCpusAverage__ : vCPUs used (peak, 95th percentile, mean of 30-second samples)
+* __cwCpuUtilizationRatio__ : _cwCpusP95_ / _cpusReserved_
+* __cpuIdleFraction__ : Fraction of samples where the task used less than 25% of its vCPUs
+* __cwMemoryMaximumGiB__, __cwMemoryP95GiB__, __cwMemoryAverageGiB__ : Memory used
+* __cwMemoryUtilizationRatio__ : _cwMemoryMaximumGiB_ / _memoryReservedGiB_
+* __memoryPressure__ : `True` when peak memory reached 90% of the enforced limit (risk of out-of-memory failures)
+* __scratchStorageMode__, __scratchMaximumGiB__, __scratchLimitGiB__, __scratchUtilizationRatio__, __scratchPressure__ : Task scratch storage use (the limit is only reported in `LOCAL` mode)
+* __gpuUtilizationAverage__, __gpuUtilizationMaximum__ (%), __gpuMemoryMaximumGiB__, __gpusIdle__ : GPU use; a GPU is idle if its utilization never exceeded 5%
+* __recommendedGpus__ : GPUs that were actually used
+* __cwStorageMaximumGiB__ : Peak run shared-filesystem use (run row)
+* __fsReadGiB__, __fsWriteGiB__, __fsReadOps__, __fsWriteOps__, __netReceiveGiB__, __netTransmitGiB__ : Task I/O totals
+* __fsThroughputMiBps__, __fsOpsPerSecond__, __netThroughputMiBps__ : Average I/O rates over the task runtime
+* __ioBound__ : `True` when average CPU use was below 30% while filesystem or network throughput was at least 100 MiB/s or filesystem operations at least 1000/s; such tasks are unlikely to benefit from more CPUs
+
+When CloudWatch data is available, CPU recommendations use the 95th-percentile vCPUs (a CPU-starved task only slows down). Memory recommendations use the larger of the CloudWatch and manifest peaks, because running out of memory fails the task and 30-second samples can miss short peaks. CloudWatch memory usage is often lower than the manifest value because the two are measured with a different scope; compare `cwMemoryMaximumGiB` with `memoryMaximumGiB` if you want to size more aggressively. Missing or zero CloudWatch values fall back to the manifest, per task and per metric. A GPU task whose GPUs all stayed idle is sized onto a CPU instance.
+
+Batch mode (`--batch`) adds aggregated CloudWatch columns (for example `maximumCwCpusP95`, `anyMemoryPressure`, `cloudwatchCount`); tasks without CloudWatch data are excluded from these aggregates rather than counted as zero. With `--plot`, vCPU and memory usage-versus-reserved charts are drawn under the timeline.
+
+Missing metrics never stop the analysis. Runs without metrics (runs that predate run metrics, run roles without `cloudwatch:PutMetricData`, runs with `LogLevel` `OFF`, runs older than the 15-month CloudWatch retention, or Regions without PromQL querying), missing permissions, and tasks that ran for less than about 30 seconds produce a notice on stderr, and the manifest values are used. `--show --cloudwatch` embeds the metrics in the JSON output (`cloudwatchMetrics`); re-analyzing that file with `--file --cloudwatch` reuses them without querying CloudWatch again, unless the earlier query was incomplete (failed queries, or a run that had only just finished), in which case it queries again. Without `--cloudwatch`, embedded metrics are ignored. The `--plot` charts are always queried from CloudWatch.
 
 #### Produce a timeline plot for a run
 
