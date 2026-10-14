@@ -19,6 +19,39 @@ STORAGE_TYPE_STATIC_RUN_STORAGE = "STATIC"
 PRICE_RESOURCE_TYPE_DYNAMIC_RUN_STORAGE = "Dynamic Run Storage"
 PRICE_RESOURCE_TYPE_STATIC_RUN_STORAGE = "Run Storage"
 
+CW_KEY = "cloudwatchMetrics"
+# Usage at or above this fraction of the limit is reported as resource pressure.
+PRESSURE_RATIO = 0.9
+# I/O-bound heuristic: mostly idle CPU while moving a lot of data.
+IO_BOUND_MAX_CPU_RATIO = 0.3
+IO_BOUND_MIN_MIBPS = 100.0
+IO_BOUND_MIN_OPS_PER_SEC = 1000.0
+MIB_PER_GIB = 1024.0
+
+# Columns copied verbatim from a task's cloudwatchMetrics into its metrics.
+_CW_TASK_COLUMNS = {
+    "cpusMaximum": "cwCpusMaximum",
+    "cpusP95": "cwCpusP95",
+    "cpusAverage": "cwCpusAverage",
+    "cpuIdleFraction": "cpuIdleFraction",
+    "memoryMaximumGiB": "cwMemoryMaximumGiB",
+    "memoryP95GiB": "cwMemoryP95GiB",
+    "memoryAverageGiB": "cwMemoryAverageGiB",
+    "scratchStorageMode": "scratchStorageMode",
+    "scratchMaximumGiB": "scratchMaximumGiB",
+    "scratchLimitGiB": "scratchLimitGiB",
+    "gpuUtilizationAverage": "gpuUtilizationAverage",
+    "gpuUtilizationMaximum": "gpuUtilizationMaximum",
+    "gpuMemoryMaximumGiB": "gpuMemoryMaximumGiB",
+    "gpusIdle": "gpusIdle",
+    "fsReadGiB": "fsReadGiB",
+    "fsWriteGiB": "fsWriteGiB",
+    "fsReadOps": "fsReadOps",
+    "fsWriteOps": "fsWriteOps",
+    "netReceiveGiB": "netReceiveGiB",
+    "netTransmitGiB": "netTransmitGiB",
+}
+
 
 def parse_time_str(s: Optional[str], utc: bool = True):
     """Parse an ISO time string, returning None if input is falsy."""
@@ -103,6 +136,67 @@ def add_run_util(run: dict, tasks: list[dict]) -> None:
             metrics[name] /= time
 
 
+def _add_cloudwatch_task_metrics(res: dict, metrics: dict, running: float) -> None:
+    """Derive CloudWatch-based task columns; missing values are left unset."""
+    cw = res.get(CW_KEY)
+    if cw is None:
+        return
+    for src, dst in _CW_TASK_COLUMNS.items():
+        if cw.get(src) is not None:
+            metrics[dst] = cw[src]
+
+    cpus_res = metrics.get("cpusReserved") or cw.get("cpusLimit")
+    if cw.get("cpusP95") is not None and cpus_res:
+        metrics["cwCpuUtilizationRatio"] = cw["cpusP95"] / float(cpus_res)
+
+    mem_max = cw.get("memoryMaximumGiB")
+    if mem_max is not None:
+        if metrics.get("memoryReservedGiB"):
+            metrics["cwMemoryUtilizationRatio"] = mem_max / float(metrics["memoryReservedGiB"])
+        # The enforced limit can be below the reservation (system overhead).
+        mem_limit = cw.get("memoryLimitGiB") or metrics.get("memoryReservedGiB")
+        if mem_limit:
+            metrics["memoryPressure"] = mem_max >= PRESSURE_RATIO * float(mem_limit)
+
+    scratch_max = cw.get("scratchMaximumGiB")
+    scratch_limit = cw.get("scratchLimitGiB")
+    if scratch_max is not None and scratch_limit:
+        ratio = scratch_max / scratch_limit
+        metrics["scratchUtilizationRatio"] = ratio
+        metrics["scratchPressure"] = ratio >= PRESSURE_RATIO
+
+    gpus_res = metrics.get("gpusReserved")
+    observed = cw.get("gpusObserved")
+    if gpus_res and observed is not None and observed >= gpus_res:
+        metrics["recommendedGpus"] = max(0, int(gpus_res) - int(cw.get("gpusIdle", 0)))
+
+    if running > 0:
+        fs_gib = [cw.get("fsReadGiB"), cw.get("fsWriteGiB")]
+        fs_ops = [cw.get("fsReadOps"), cw.get("fsWriteOps")]
+        net_gib = [cw.get("netReceiveGiB"), cw.get("netTransmitGiB")]
+        fs_mibps = net_mibps = ops_ps = None
+        if any(v is not None for v in fs_gib):
+            fs_mibps = sum(v or 0.0 for v in fs_gib) * MIB_PER_GIB / running
+            metrics["fsThroughputMiBps"] = fs_mibps
+        if any(v is not None for v in fs_ops):
+            ops_ps = sum(v or 0.0 for v in fs_ops) / running
+            metrics["fsOpsPerSecond"] = ops_ps
+        if any(v is not None for v in net_gib):
+            net_mibps = sum(v or 0.0 for v in net_gib) * MIB_PER_GIB / running
+            metrics["netThroughputMiBps"] = net_mibps
+        cpu_avg = cw.get("cpusAverage")
+        if (
+            cpu_avg is not None
+            and cpus_res
+            and (fs_mibps is not None or net_mibps is not None or ops_ps is not None)
+        ):
+            metrics["ioBound"] = cpu_avg / float(cpus_res) < IO_BOUND_MAX_CPU_RATIO and (
+                (fs_mibps or 0.0) >= IO_BOUND_MIN_MIBPS
+                or (net_mibps or 0.0) >= IO_BOUND_MIN_MIBPS
+                or (ops_ps or 0.0) >= IO_BOUND_MIN_OPS_PER_SEC
+            )
+
+
 def add_metrics(
     res: dict,
     resources: list[dict],
@@ -150,6 +244,13 @@ def add_metrics(
     storage_type = res.get("storageType", STORAGE_TYPE_STATIC_RUN_STORAGE)
 
     if rtype == "run":
+        cw_store = (res.get(CW_KEY) or {}).get("storageMaximumGiB")
+        if cw_store is not None:
+            metrics["cwStorageMaximumGiB"] = cw_store
+    else:
+        _add_cloudwatch_task_metrics(res, metrics, running)
+
+    if rtype == "run":
         # Get capacity requested (static), capacity max. used (dynamic) and
         # charged storage (the requested capacity for static or average used for dynamic)
         if storage_type == STORAGE_TYPE_STATIC_RUN_STORAGE:
@@ -182,10 +283,30 @@ def add_metrics(
         price = pricing_cache.get_price(itype, region, running_for_instance_cost / SECS_PER_HOUR)
         if price:
             metrics["estimatedUSD"] = price
-        if cpus_max and mem_max and not gpus_res:
+        # With CloudWatch run metrics, size CPU on p95 vCPUs (CPU starvation only
+        # slows a task down). Memory uses the larger of the CloudWatch and manifest
+        # peaks: running out of memory fails the task, and 30-second samples can
+        # miss short peaks. Zero/absent CloudWatch values fall back to the manifest.
+        cw_cpus = metrics.get("cwCpusP95") or None
+        cw_mem = metrics.get("cwMemoryMaximumGiB") or None
+        cpu_basis = cw_cpus if cw_cpus is not None else cpus_max
+        mem_basis = max(cw_mem, mem_max or 0.0) if cw_mem is not None else mem_max
+        if CW_KEY in res:
+            # Which source determined each sizing basis
+            sources = [cw_cpus is not None, cw_mem is not None and cw_mem >= (mem_max or 0.0)]
+            metrics["metricsSource"] = (
+                "cloudwatch" if all(sources) else "mixed" if any(sources) else "manifest"
+            )
+        if cw_cpus is not None or cw_mem is not None:
+            have_basis = cpu_basis is not None and mem_basis is not None
+        else:
+            have_basis = bool(cpus_max and mem_max)
+        # A GPU task whose GPUs all stayed idle can move to a CPU-only instance.
+        gpus_unused = bool(gpus_res) and metrics.get("recommendedGpus") == 0
+        if have_basis and (not gpus_res or gpus_unused):
             # Get smallest instance type that meets the requirements
-            cpus_max_adj = math.ceil(cpus_max * headroom_multiplier)
-            mem_max_adj = math.ceil(mem_max * headroom_multiplier)
+            cpus_max_adj = math.ceil(float(cpu_basis) * headroom_multiplier)
+            mem_max_adj = math.ceil(float(mem_basis) * headroom_multiplier)
             instance_result = utils.get_instance_for_requirements(cpus_max_adj, mem_max_adj)
             if instance_result:
                 itype, cpus, mem = instance_result
