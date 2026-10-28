@@ -1,9 +1,13 @@
-"""Tests for --parameter handling in `aws-healthomics-tools rerun`."""
+"""Tests for request building in `aws-healthomics-tools rerun`."""
 
 import copy
 import unittest
 
-from omics.cli.rerun.__main__ import _set_nested, start_run_request
+from omics.cli.rerun.__main__ import (
+    _set_nested,
+    output_overwrite_warning,
+    start_run_request,
+)
 
 
 def _make_run(parameters=None):
@@ -13,6 +17,14 @@ def _make_run(parameters=None):
     }
     if parameters is not None:
         run["parameters"] = parameters
+    return run
+
+
+def _make_output_run(mode=None):
+    run = _make_run()
+    run["outputUri"] = "s3://my-bucket/my-path"
+    if mode is not None:
+        run["outputUriPrefixMode"] = mode
     return run
 
 
@@ -34,6 +46,7 @@ def _opts(**overrides):
         "--workflow-owner-id": None,
         "--retention-mode": None,
         "--output-uri": None,
+        "--output-uri-prefix-mode": None,
         "--log-level": None,
         "--tag": [],
     }
@@ -121,6 +134,67 @@ class TestParameterOverride(unittest.TestCase):
             _opts(**{"--parameter": ["foo=a=b=c"]}),
         )
         self.assertEqual(rqst["parameters"]["foo"], "a=b=c")
+
+
+class TestOutputUriPrefixMode(unittest.TestCase):
+    def test_manifest_mode_is_forwarded(self):
+        rqst = start_run_request(_make_output_run("NONE_WITH_OVERWRITE"), _opts())
+        self.assertEqual(rqst["outputUriPrefixMode"], "NONE_WITH_OVERWRITE")
+
+    def test_absent_in_manifest_is_absent_in_request(self):
+        rqst = start_run_request(_make_output_run(), _opts())
+        self.assertNotIn("outputUriPrefixMode", rqst)
+
+    def test_cli_override_replaces_manifest_mode(self):
+        rqst = start_run_request(
+            _make_output_run("NONE_WITH_OVERWRITE"),
+            _opts(**{"--output-uri-prefix-mode": "SERVICE_DEFINED"}),
+        )
+        self.assertEqual(rqst["outputUriPrefixMode"], "SERVICE_DEFINED")
+
+    def test_cli_sets_mode_on_run_without_one(self):
+        rqst = start_run_request(
+            _make_output_run(),
+            _opts(**{"--output-uri-prefix-mode": "NONE_WITH_OVERWRITE"}),
+        )
+        self.assertEqual(rqst["outputUriPrefixMode"], "NONE_WITH_OVERWRITE")
+
+    def test_invalid_mode_dies(self):
+        with self.assertRaises(SystemExit):
+            start_run_request(_make_output_run(), _opts(**{"--output-uri-prefix-mode": "BOGUS"}))
+
+
+class TestOutputOverwriteWarning(unittest.TestCase):
+    def test_warns_when_overwrite_run_keeps_output_uri(self):
+        run = _make_output_run("NONE_WITH_OVERWRITE")
+        warning = output_overwrite_warning(run, start_run_request(run, _opts()))
+        self.assertIsNotNone(warning)
+        self.assertIn("s3://my-bucket/my-path", warning)
+
+    def test_warns_when_output_uri_override_equals_original(self):
+        run = _make_output_run("NONE_WITH_OVERWRITE")
+        rqst = start_run_request(run, _opts(**{"--output-uri": "s3://my-bucket/my-path"}))
+        self.assertIsNotNone(output_overwrite_warning(run, rqst))
+
+    def test_no_warning_when_output_uri_changed(self):
+        run = _make_output_run("NONE_WITH_OVERWRITE")
+        rqst = start_run_request(run, _opts(**{"--output-uri": "s3://my-bucket/other-path"}))
+        self.assertIsNone(output_overwrite_warning(run, rqst))
+
+    def test_no_warning_when_mode_overridden_to_service_defined(self):
+        run = _make_output_run("NONE_WITH_OVERWRITE")
+        rqst = start_run_request(run, _opts(**{"--output-uri-prefix-mode": "SERVICE_DEFINED"}))
+        self.assertIsNone(output_overwrite_warning(run, rqst))
+
+    def test_no_warning_for_run_without_mode(self):
+        run = _make_output_run()
+        self.assertIsNone(output_overwrite_warning(run, start_run_request(run, _opts())))
+
+    def test_no_warning_when_mode_forced_on_run_without_one(self):
+        # the original outputs live under <outputUri>/<runId>/<uuid>/ and are not touched
+        run = _make_output_run()
+        rqst = start_run_request(run, _opts(**{"--output-uri-prefix-mode": "NONE_WITH_OVERWRITE"}))
+        self.assertIsNone(output_overwrite_warning(run, rqst))
 
 
 if __name__ == "__main__":

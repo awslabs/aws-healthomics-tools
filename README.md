@@ -18,6 +18,7 @@ SDK and CLI Tools for working with the AWS HealthOmics Service.
     - [HealthOmics Rerun](#healthomics-rerun)
       - [List runs from manifest](#list-runs-from-manifest)
       - [Rerun a previously-executed run](#rerun-a-previously-executed-run)
+        - [Rerun a previous run with outputUriPrefixMode](#rerun-a-previous-run-with-outputuriprefixmode)
     - [HealthOmics Run Analyzer](#healthomics-run-analyzer)
       - [List completed runs](#list-completed-runs)
       - [Analyze a specific workflow run](#analyze-a-specific-workflow-run)
@@ -332,6 +333,20 @@ StartRun request:
   },
   "outputUri": "s3://my-bucket/my-path"
 }
+```
+
+##### Rerun a previous run with outputUriPrefixMode
+A run started with `outputUriPrefixMode` set to `NONE_WITH_OVERWRITE` writes its outputs directly under `outputUri` instead of under a per-run `<runId>/<uuid>/` prefix. The run manifest records this mode (for runs completed after the service started recording it) and `rerun` forwards it to the new StartRun request. Because the original `outputUri` is reused unless overridden, such a rerun overwrites the original run's outputs at the same keys. `rerun` warns on stderr and continues:
+
+```text
+aws-healthomics-tools: warning: outputUriPrefixMode is NONE_WITH_OVERWRITE and outputUri is unchanged: the new run will overwrite the original run's outputs under s3://my-bucket/my-path; use --output-uri to write elsewhere or --output-uri-prefix-mode=SERVICE_DEFINED to keep a per-run prefix
+```
+
+To keep the original outputs, write the new run somewhere else or switch it back to the per-run prefix layout:
+
+```bash
+aws-healthomics-tools rerun 1234567 --output-uri s3://my-bucket/another-path
+aws-healthomics-tools rerun 1234567 --output-uri-prefix-mode SERVICE_DEFINED
 ```
 
 ### HealthOmics Run Analyzer
