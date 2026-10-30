@@ -21,6 +21,7 @@ Usage: omics-rerun [<runIdOrArn>...]
                    [--workflow-owner-id=<value>]
                    [--retention-mode=<mode>]
                    [--output-uri=<uri>]
+                   [--output-uri-prefix-mode=<mode>]
                    [--log-level=<level>]
                    [--tag=<key=value>...]
                    [--count=<value>]
@@ -48,6 +49,7 @@ Options:
  --workflow-owner-id=<value>            Override original run parameter, required for shared workflows
  --retention-mode=<mode>                Override original run parameter
  --output-uri=<uri>                     Override original run parameter
+ --output-uri-prefix-mode=<mode>        Override original run parameter, SERVICE_DEFINED or NONE_WITH_OVERWRITE
  --log-level=<level>                    Override original run parameter
  --tag=<key=value>...                   Override original run parameter
  -o, --out=<path>                       Output to file
@@ -297,6 +299,14 @@ def start_run_request(run, opts={}):
 
     set_param(rqst, "retentionMode", "--retention-mode")
     set_param(rqst, "outputUri", "--output-uri")
+    set_param(rqst, "outputUriPrefixMode", "--output-uri-prefix-mode")
+    if "outputUriPrefixMode" in rqst and rqst["outputUriPrefixMode"] not in (
+        "SERVICE_DEFINED",
+        "NONE_WITH_OVERWRITE",
+    ):
+        die(
+            f"invalid --output-uri-prefix-mode: {rqst['outputUriPrefixMode']} (expecting SERVICE_DEFINED or NONE_WITH_OVERWRITE)"
+        )
     set_param(rqst, "logLevel", "--log-level")
     for t in (opts or {}).get("--tag", []):
         m = re.match(r"^(\w+)=(\w+)", t)
@@ -314,6 +324,26 @@ def start_run_request(run, opts={}):
             workflow_version_name = workflow_version_name.split("/")[-1]
             rqst["workflowVersionName"] = workflow_version_name
     return rqst
+
+
+def output_overwrite_warning(run, rqst):
+    """Return a warning if the rerun would overwrite the original run's outputs, else None
+
+    A run started with outputUriPrefixMode NONE_WITH_OVERWRITE writes its outputs directly
+    under outputUri instead of under a per-run <runId>/<uuid>/ prefix, so rerunning it with
+    the same mode and the same outputUri replaces the original outputs at the same keys.
+    """
+    if (
+        run.get("outputUriPrefixMode") == "NONE_WITH_OVERWRITE"
+        and rqst.get("outputUriPrefixMode") == "NONE_WITH_OVERWRITE"
+        and rqst.get("outputUri") == run.get("outputUri")
+    ):
+        return (
+            "outputUriPrefixMode is NONE_WITH_OVERWRITE and outputUri is unchanged: the new run "
+            f"will overwrite the original run's outputs under {rqst['outputUri']}; use --output-uri "
+            "to write elsewhere or --output-uri-prefix-mode=SERVICE_DEFINED to keep a per-run prefix"
+        )
+    return None
 
 
 def main(argv=None):
@@ -348,6 +378,9 @@ def main(argv=None):
             # Rerun specified run
             rqst0 = start_run_request(run)
             rqst = start_run_request(run, opts)
+            warning = output_overwrite_warning(run, rqst)
+            if warning:
+                sys.stderr.write(f"{exename}: warning: {warning}\n")
             if rqst != rqst0:
                 out.write(f"Original request:\n{json.dumps(rqst0, indent=2)}\n")  # noqa
             out.write(f"StartRun request:\n{json.dumps(rqst, indent=2)}\n")  # noqa
