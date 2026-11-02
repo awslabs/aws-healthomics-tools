@@ -336,10 +336,17 @@ StartRun request:
 ```
 
 ##### Rerun a previous run with outputUriPrefixMode
-A run started with `outputUriPrefixMode` set to `NONE_WITH_OVERWRITE` writes its outputs directly under `outputUri` instead of under a per-run `<runId>/<uuid>/` prefix. The run manifest records this mode (for runs completed after the service started recording it) and `rerun` forwards it to the new StartRun request. Because the original `outputUri` is reused unless overridden, such a rerun overwrites the original run's outputs at the same keys. `rerun` warns on stderr and continues:
+A run started with `outputUriPrefixMode` set to `NONE_WITH_OVERWRITE` writes its outputs directly under `outputUri` instead of under a per-run `<runId>/<uuid>/` prefix. The run manifest records this mode (for runs completed after the service started recording it) and `rerun` forwards it to the new StartRun request. Because the original `outputUri` is reused unless overridden, such a rerun overwrites the original run's outputs at the same keys. `rerun` prints a warning on stderr and asks for confirmation before calling StartRun:
 
 ```text
 aws-healthomics-tools: warning: outputUriPrefixMode is NONE_WITH_OVERWRITE and outputUri is unchanged: the new run will overwrite the original run's outputs under s3://my-bucket/my-path; use --output-uri to write elsewhere or --output-uri-prefix-mode=SERVICE_DEFINED to keep a per-run prefix
+Proceed and overwrite? [y/N]
+```
+
+Any answer other than `y` or `yes` aborts without starting a run. When stdin is not a terminal (for example in a script or CI job), `rerun` refuses instead of prompting. Pass `--force` to skip the confirmation; the warning is still printed. `--dry-run` only prints the warning and the request.
+
+```bash
+aws-healthomics-tools rerun 1234567 --force
 ```
 
 To keep the original outputs, write the new run somewhere else or switch it back to the per-run prefix layout:

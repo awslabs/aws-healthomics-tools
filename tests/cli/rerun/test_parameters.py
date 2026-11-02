@@ -1,8 +1,11 @@
 """Tests for request building in `aws-healthomics-tools rerun`."""
 
 import copy
+import io
 import unittest
+from unittest import mock
 
+import omics.cli.rerun.__main__ as rerun
 from omics.cli.rerun.__main__ import (
     _set_nested,
     output_overwrite_warning,
@@ -195,6 +198,93 @@ class TestOutputOverwriteWarning(unittest.TestCase):
         run = _make_output_run()
         rqst = start_run_request(run, _opts(**{"--output-uri-prefix-mode": "NONE_WITH_OVERWRITE"}))
         self.assertIsNone(output_overwrite_warning(run, rqst))
+
+
+class _Tty(io.StringIO):
+    def __init__(self, text, tty=True):
+        super().__init__(text)
+        self._tty = tty
+
+    def isatty(self):
+        return self._tty
+
+
+class TestConfirmOverwrite(unittest.TestCase):
+    def _confirm(self, text, tty=True):
+        with mock.patch.object(rerun.sys, "stdin", _Tty(text, tty)), mock.patch.object(
+            rerun.sys, "stderr", io.StringIO()
+        ):
+            return rerun.confirm_overwrite()
+
+    def test_yes_proceeds(self):
+        self.assertTrue(self._confirm("y\n"))
+        self.assertTrue(self._confirm("YES\n"))
+
+    def test_other_answers_abort(self):
+        self.assertFalse(self._confirm("n\n"))
+        self.assertFalse(self._confirm("\n"))
+        self.assertFalse(self._confirm(""))
+
+    def test_non_interactive_stdin_refuses(self):
+        with self.assertRaises(SystemExit):
+            self._confirm("y\n", tty=False)
+
+
+class TestMainOverwriteConfirmation(unittest.TestCase):
+    """main() asks before an overwriting StartRun unless --dry-run or --force is given"""
+
+    def _main(self, args, run, confirm=True):
+        omics = mock.Mock()
+        omics.start_run.return_value = {"id": "1", "ResponseMetadata": {}}
+        stream = {"id": "7777", "creationTime": "t", "logStreamName": "s"}
+        with mock.patch.object(rerun.boto3, "client", return_value=omics), mock.patch.object(
+            rerun, "get_runs", return_value=[stream]
+        ), mock.patch.object(rerun, "get_run_resources", return_value=[run]), mock.patch.object(
+            rerun, "confirm_overwrite", return_value=confirm
+        ) as ask, mock.patch.object(
+            rerun.sys, "stdout", io.StringIO()
+        ), mock.patch.object(
+            rerun.sys, "stderr", io.StringIO()
+        ):
+            try:
+                rerun.main(["7777"] + args)
+                exited = False
+            except SystemExit:
+                exited = True
+        return omics.start_run.called, ask.called, exited
+
+    def test_overwrite_asks_and_submits_on_yes(self):
+        submitted, asked, _ = self._main([], _make_output_run("NONE_WITH_OVERWRITE"))
+        self.assertTrue(asked)
+        self.assertTrue(submitted)
+
+    def test_overwrite_aborts_on_no(self):
+        submitted, asked, exited = self._main([], _make_output_run("NONE_WITH_OVERWRITE"), False)
+        self.assertTrue(asked)
+        self.assertFalse(submitted)
+        self.assertTrue(exited)
+
+    def test_force_skips_confirmation(self):
+        submitted, asked, _ = self._main(["--force"], _make_output_run("NONE_WITH_OVERWRITE"))
+        self.assertFalse(asked)
+        self.assertTrue(submitted)
+
+    def test_dry_run_does_not_ask(self):
+        submitted, asked, _ = self._main(["--dry-run"], _make_output_run("NONE_WITH_OVERWRITE"))
+        self.assertFalse(asked)
+        self.assertFalse(submitted)
+
+    def test_new_output_uri_does_not_ask(self):
+        submitted, asked, _ = self._main(
+            ["--output-uri=s3://my-bucket/other-path"], _make_output_run("NONE_WITH_OVERWRITE")
+        )
+        self.assertFalse(asked)
+        self.assertTrue(submitted)
+
+    def test_run_without_mode_does_not_ask(self):
+        submitted, asked, _ = self._main([], _make_output_run())
+        self.assertFalse(asked)
+        self.assertTrue(submitted)
 
 
 if __name__ == "__main__":

@@ -27,6 +27,7 @@ Usage: omics-rerun [<runIdOrArn>...]
                    [--count=<value>]
                    [--out=<path>]
                    [--dry-run]
+                   [--force]
                    [--show]
                    [--help]
 
@@ -54,6 +55,8 @@ Options:
  --tag=<key=value>...                   Override original run parameter
  -o, --out=<path>                       Output to file
  -d, --dry-run                          Show request only
+ -f, --force                            Do not ask for confirmation before overwriting the
+                                        original run's outputs (NONE_WITH_OVERWRITE)
  -h, --help                             Show help text
 
 Examples:
@@ -346,6 +349,23 @@ def output_overwrite_warning(run, rqst):
     return None
 
 
+def confirm_overwrite():
+    """Ask on the terminal whether to continue with an overwriting rerun; return True to proceed
+
+    Without an interactive stdin (scripts, CI) there is nobody to answer, so the rerun is
+    refused and --force must be passed to proceed.
+    """
+    if not sys.stdin or not sys.stdin.isatty():
+        die("refusing to overwrite the original run's outputs without confirmation; use --force")
+    sys.stderr.write("Proceed and overwrite? [y/N] ")
+    sys.stderr.flush()
+    try:
+        answer = input()
+    except EOFError:
+        answer = ""
+    return answer.strip().lower() in ("y", "yes")
+
+
 def main(argv=None):
     """Parse command line arguments and execute rerun command."""
     opts = docopt.docopt(__doc__, argv=argv)
@@ -385,6 +405,8 @@ def main(argv=None):
                 out.write(f"Original request:\n{json.dumps(rqst0, indent=2)}\n")  # noqa
             out.write(f"StartRun request:\n{json.dumps(rqst, indent=2)}\n")  # noqa
             if not opts["--dry-run"]:
+                if warning and not opts["--force"] and not confirm_overwrite():
+                    die("aborted")
                 try:
                     omics = boto3.client("omics")
                     resp = omics.start_run(**rqst)
