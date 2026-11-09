@@ -45,7 +45,7 @@ pip install aws-healthomics-tools
 ### Install from source
 
 Installing from source requires that your machine has the following prerequisites installed: 
-- `python3.10` or above
+- `python3.11` or above
 - `poetry` package manager
 - `make` build tool
 

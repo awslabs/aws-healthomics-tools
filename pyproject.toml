@@ -18,7 +18,7 @@ readme = "README.md"
 packages = [{ include = "omics" }]
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.11"
 s3transfer = ">=0.14.0"
 
 boto3 = "^1.40.69"
@@ -29,8 +29,8 @@ docopt = "^0.6.2"
 python-dateutil = "^2.8.2"
 bokeh = "^3.8.1"
 pandas = "^2.3.3"
-tornado = ">=6.5.7"  # Added to fix security vulnerability
-pillow = ">=12.3.0"  # Added to fix security vulnerabilities (heap OOB write, decompression bomb, etc.)
+tornado = ">=6.6"  # Added to fix security vulnerabilities
+pillow = ">=13.0.0"  # Added to fix security vulnerabilities (heap OOB write, decompression bomb, etc.)
 pygments = ">=2.20.0"
 requests = ">=2.33.0"
 
