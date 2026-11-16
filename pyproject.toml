@@ -28,7 +28,7 @@ botocore-stubs = "^1.40.69"
 docopt = "^0.6.2"
 python-dateutil = "^2.8.2"
 bokeh = "^3.8.1"
-pandas = "^2.3.3"
+pandas = ">=2.3.3,<4.0.0"
 tornado = ">=6.6"  # Added to fix security vulnerabilities
 pillow = ">=13.0.0"  # Added to fix security vulnerabilities (heap OOB write, decompression bomb, etc.)
 pygments = ">=2.20.0"
