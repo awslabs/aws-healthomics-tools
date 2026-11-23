@@ -2812,14 +2812,14 @@ files = [
 
 [[package]]
 name = "types-python-dateutil"
-version = "2.9.0.20261029"
+version = "2.9.0.20261116"
 description = "Typing stubs for python-dateutil"
 optional = false
 python-versions = ">=3.10"
 groups = ["dev"]
 files = [
-    {file = "types_python_dateutil-2.9.0.20261029-py3-none-any.whl", hash = "sha256:8fd04c6e1722d2523a74d6670596fc0007077651465b686f144ae1d200dcacf5"},
-    {file = "types_python_dateutil-2.9.0.20261029.tar.gz", hash = "sha256:3258b491686c441d8074cfc8712308741900c9ff128a06421baec3767c503511"},
+    {file = "types_python_dateutil-2.9.0.20261116-py3-none-any.whl", hash = "sha256:62e7c65849170a4847539573153d34f4007777dd62651ec8849ec8f08e8922a2"},
+    {file = "types_python_dateutil-2.9.0.20261116.tar.gz", hash = "sha256:4213748a3f699431a83edf71969de9caa79d0846a5e8785c8a49072ff1968613"},
 ]
 
 [[package]]
